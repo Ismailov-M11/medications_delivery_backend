@@ -1,41 +1,27 @@
-const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken')
 
-const auth = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      success: false,
-      message: 'No token provided. Authorization denied.',
-    });
+function auth(req, res, next) {
+  const header = req.headers.authorization
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: 'No token provided' })
   }
-
-  const token = authHeader.split(' ')[1];
-
+  const token = header.split(' ')[1]
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    // decoded contains { id, role, iat, exp }
-    req.user = { id: decoded.id, role: decoded.role };
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: 'Token is invalid or expired.',
-    });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    req.user = decoded // { id, role }
+    next()
+  } catch {
+    return res.status(401).json({ success: false, message: 'Invalid token' })
   }
-};
+}
 
-// Middleware that restricts to a specific role
-const requireRole = (...roles) => {
+function requireRole(...roles) {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access forbidden: insufficient permissions.',
-      });
+    if (!roles.includes(req.user?.role)) {
+      return res.status(403).json({ success: false, message: 'Forbidden' })
     }
-    next();
-  };
-};
+    next()
+  }
+}
 
-module.exports = { auth, requireRole };
+module.exports = { auth, requireRole }

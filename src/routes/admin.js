@@ -1,395 +1,179 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const mongoose = require('mongoose');
-const Order = require('../models/Order');
-const Pharmacy = require('../models/Pharmacy');
-const { auth, requireRole } = require('../middleware/auth');
+const express = require('express')
+const bcrypt = require('bcryptjs')
+const prisma = require('../config/db')
+const { auth, requireRole } = require('../middleware/auth')
 
-const router = express.Router();
+const router = express.Router()
+router.use(auth)
+router.use(requireRole('admin'))
 
-// All admin routes require a valid admin JWT
-router.use(auth, requireRole('admin'));
-
-// ---------------------------------------------------------------------------
 // GET /api/admin/orders
-// All orders with pagination and optional pharmacy filter.
-// Query: ?page=1&limit=20&pharmacy=<pharmacyId>
-// ---------------------------------------------------------------------------
-router.get('/orders', async (req, res) => {
+router.get('/orders', async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 20));
-    const skip = (page - 1) * limit;
-
-    const filter = {};
-    if (req.query.pharmacy) {
-      if (!mongoose.Types.ObjectId.isValid(req.query.pharmacy)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid pharmacy ID.',
-        });
-      }
-      filter.pharmacy = req.query.pharmacy;
-    }
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const limit = Math.min(100, parseInt(req.query.limit) || 20)
+    const skip = (page - 1) * limit
+    const where = {}
+    if (req.query.pharmacyId) where.pharmacyId = req.query.pharmacyId
 
     const [orders, total] = await Promise.all([
-      Order.find(filter)
-        .populate('pharmacy', 'name address phone')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Order.countDocuments(filter),
-    ]);
-
-    return res.status(200).json({
+      prisma.order.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: { pharmacy: { select: { name: true } } }
+      }),
+      prisma.order.count({ where })
+    ])
+    res.json({
       success: true,
-      message: 'Orders retrieved successfully.',
-      data: {
-        orders,
-        total,
-        page,
-        pages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    console.error('Admin get orders error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error retrieving orders.',
-    });
+      data: { orders, total, page, pages: Math.ceil(total / limit) }
+    })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-// ---------------------------------------------------------------------------
 // GET /api/admin/pharmacies
-// All pharmacies.
-// ---------------------------------------------------------------------------
-router.get('/pharmacies', async (req, res) => {
+router.get('/pharmacies', async (req, res, next) => {
   try {
-    const pharmacies = await Pharmacy.find()
-      .select('-password')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return res.status(200).json({
-      success: true,
-      message: 'Pharmacies retrieved successfully.',
-      data: pharmacies,
-    });
-  } catch (error) {
-    console.error('Admin get pharmacies error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error retrieving pharmacies.',
-    });
+    const pharmacies = await prisma.pharmacy.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, name: true, address: true, phone: true,
+        lat: true, lng: true, login: true,
+        isActive: true, subscriptionExpiry: true, createdAt: true,
+        _count: { select: { orders: true } }
+      }
+    })
+    res.json({ success: true, data: pharmacies })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-// ---------------------------------------------------------------------------
 // POST /api/admin/pharmacies
-// Create a new pharmacy.
-// Body: { name, address, phone, coordinates?, login, password, subscriptionExpiry? }
-// ---------------------------------------------------------------------------
-router.post('/pharmacies', async (req, res) => {
+router.post('/pharmacies', async (req, res, next) => {
   try {
-    const {
-      name,
-      address,
-      phone,
-      coordinates,
-      login,
-      password,
-      subscriptionExpiry,
-    } = req.body;
-
+    const { name, address, phone, login, password, lat, lng, subscriptionExpiry } = req.body
     if (!name || !address || !phone || !login || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'name, address, phone, login and password are required.',
-      });
+      return res.status(400).json({ success: false, message: 'All fields required' })
     }
-
-    const existingLogin = await Pharmacy.findOne({ login: login.trim() });
-    if (existingLogin) {
-      return res.status(409).json({
-        success: false,
-        message: 'A pharmacy with this login already exists.',
-      });
+    const exists = await prisma.pharmacy.findUnique({ where: { login } })
+    if (exists) {
+      return res.status(409).json({ success: false, message: 'Login already taken' })
     }
-
-    const pharmacy = new Pharmacy({
-      name: name.trim(),
-      address: address.trim(),
-      phone: phone.trim(),
-      coordinates: coordinates || undefined,
-      login: login.trim(),
-      password, // hashed by pre-save hook
-      subscriptionExpiry: subscriptionExpiry ? new Date(subscriptionExpiry) : undefined,
-    });
-
-    await pharmacy.save();
-
-    const pharmacyObj = pharmacy.toObject();
-    delete pharmacyObj.password;
-
-    return res.status(201).json({
-      success: true,
-      message: 'Pharmacy created successfully.',
-      data: pharmacyObj,
-    });
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: 'A pharmacy with this login already exists.',
-      });
-    }
-    console.error('Admin create pharmacy error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error creating pharmacy.',
-    });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// PUT /api/admin/pharmacies/:id
-// Update pharmacy fields (excluding login/password).
-// Body: { isActive?, subscriptionExpiry?, name?, address?, phone? }
-// ---------------------------------------------------------------------------
-router.put('/pharmacies/:id', async (req, res) => {
-  try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid pharmacy ID.',
-      });
-    }
-
-    const allowedFields = ['isActive', 'subscriptionExpiry', 'name', 'address', 'phone', 'coordinates'];
-    const updates = {};
-
-    for (const field of allowedFields) {
-      if (req.body[field] !== undefined) {
-        updates[field] = req.body[field];
-      }
-    }
-
-    if (updates.subscriptionExpiry) {
-      updates.subscriptionExpiry = new Date(updates.subscriptionExpiry);
-    }
-
-    // If re-activating but subscription is expired, block
-    if (updates.isActive === true) {
-      const pharmacy = await Pharmacy.findById(req.params.id);
-      if (!pharmacy) {
-        return res.status(404).json({
-          success: false,
-          message: 'Pharmacy not found.',
-        });
-      }
-      const expiry = updates.subscriptionExpiry || pharmacy.subscriptionExpiry;
-      if (expiry && expiry < new Date()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Cannot activate pharmacy with expired subscription. Update subscriptionExpiry first.',
-        });
-      }
-    }
-
-    const pharmacy = await Pharmacy.findByIdAndUpdate(
-      req.params.id,
-      { $set: updates },
-      { new: true, runValidators: true }
-    ).select('-password');
-
-    if (!pharmacy) {
-      return res.status(404).json({
-        success: false,
-        message: 'Pharmacy not found.',
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Pharmacy updated successfully.',
-      data: pharmacy,
-    });
-  } catch (error) {
-    console.error('Admin update pharmacy error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error updating pharmacy.',
-    });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// DELETE /api/admin/pharmacies/:id
-// Soft delete: set isActive = false.
-// ---------------------------------------------------------------------------
-router.delete('/pharmacies/:id', async (req, res) => {
-  try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid pharmacy ID.',
-      });
-    }
-
-    const pharmacy = await Pharmacy.findByIdAndUpdate(
-      req.params.id,
-      { $set: { isActive: false } },
-      { new: true }
-    ).select('-password');
-
-    if (!pharmacy) {
-      return res.status(404).json({
-        success: false,
-        message: 'Pharmacy not found.',
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Pharmacy deactivated (soft deleted) successfully.',
-      data: pharmacy,
-    });
-  } catch (error) {
-    console.error('Admin delete pharmacy error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error deleting pharmacy.',
-    });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// GET /api/admin/analytics
-// Returns aggregated stats.
-// ---------------------------------------------------------------------------
-router.get('/analytics', async (req, res) => {
-  try {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    // Run all aggregations in parallel
-    const [
-      totalsResult,
-      ordersByStatus,
-      ordersByDay,
-      ordersByCourier,
-    ] = await Promise.all([
-      // Total orders, total medicines amount, total delivery amount
-      Order.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalOrders: { $sum: 1 },
-            totalMedicinesAmount: { $sum: { $ifNull: ['$medicinesTotal', 0] } },
-            totalDeliveryAmount: { $sum: { $ifNull: ['$deliveryPrice', 0] } },
-          },
-        },
-      ]),
-
-      // Orders grouped by status
-      Order.aggregate([
-        {
-          $group: {
-            _id: '$status',
-            count: { $sum: 1 },
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            status: '$_id',
-            count: 1,
-          },
-        },
-      ]),
-
-      // Orders per day for last 30 days
-      Order.aggregate([
-        {
-          $match: {
-            createdAt: { $gte: thirtyDaysAgo },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
-            },
-            count: { $sum: 1 },
-            medicinesAmount: { $sum: { $ifNull: ['$medicinesTotal', 0] } },
-            deliveryAmount: { $sum: { $ifNull: ['$deliveryPrice', 0] } },
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            date: '$_id',
-            count: 1,
-            medicinesAmount: 1,
-            deliveryAmount: 1,
-          },
-        },
-        { $sort: { date: 1 } },
-      ]),
-
-      // Orders grouped by courier
-      Order.aggregate([
-        {
-          $match: {
-            selectedCourier: { $exists: true, $ne: null },
-          },
-        },
-        {
-          $group: {
-            _id: '$selectedCourier',
-            count: { $sum: 1 },
-            totalDeliveryAmount: { $sum: { $ifNull: ['$deliveryPrice', 0] } },
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            courier: '$_id',
-            count: 1,
-            totalDeliveryAmount: 1,
-          },
-        },
-      ]),
-    ]);
-
-    const totals = totalsResult[0] || {
-      totalOrders: 0,
-      totalMedicinesAmount: 0,
-      totalDeliveryAmount: 0,
-    };
-
-    return res.status(200).json({
-      success: true,
-      message: 'Analytics retrieved successfully.',
+    const hashed = await bcrypt.hash(password, 10)
+    const pharmacy = await prisma.pharmacy.create({
       data: {
-        totalOrders: totals.totalOrders,
-        totalMedicinesAmount: totals.totalMedicinesAmount,
-        totalDeliveryAmount: totals.totalDeliveryAmount,
-        ordersByStatus,
-        ordersByDay,
-        ordersByCourier,
-      },
-    });
-  } catch (error) {
-    console.error('Admin analytics error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error retrieving analytics.',
-    });
+        name, address, phone, login,
+        password: hashed,
+        lat: lat ? Number(lat) : null,
+        lng: lng ? Number(lng) : null,
+        subscriptionExpiry: subscriptionExpiry ? new Date(subscriptionExpiry) : null,
+      }
+    })
+    const { password: _, ...safePharmacy } = pharmacy
+    res.status(201).json({ success: true, data: safePharmacy })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-module.exports = router;
+// PUT /api/admin/pharmacies/:id
+router.put('/pharmacies/:id', async (req, res, next) => {
+  try {
+    const { name, address, phone, isActive, subscriptionExpiry } = req.body
+    const data = {}
+    if (name !== undefined) data.name = name
+    if (address !== undefined) data.address = address
+    if (phone !== undefined) data.phone = phone
+    if (isActive !== undefined) data.isActive = Boolean(isActive)
+    if (subscriptionExpiry !== undefined) data.subscriptionExpiry = subscriptionExpiry ? new Date(subscriptionExpiry) : null
+
+    const pharmacy = await prisma.pharmacy.update({
+      where: { id: req.params.id },
+      data,
+      select: {
+        id: true, name: true, address: true, phone: true,
+        isActive: true, subscriptionExpiry: true, createdAt: true
+      }
+    })
+    res.json({ success: true, data: pharmacy })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// DELETE /api/admin/pharmacies/:id — soft delete
+router.delete('/pharmacies/:id', async (req, res, next) => {
+  try {
+    await prisma.pharmacy.update({
+      where: { id: req.params.id },
+      data: { isActive: false }
+    })
+    res.json({ success: true, message: 'Pharmacy deactivated' })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/admin/analytics
+router.get('/analytics', async (req, res, next) => {
+  try {
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const [
+      totalOrders,
+      activePharmacies,
+      aggregates,
+      ordersByStatus,
+      ordersByCourier,
+      recentOrders
+    ] = await Promise.all([
+      prisma.order.count(),
+      prisma.pharmacy.count({ where: { isActive: true } }),
+      prisma.order.aggregate({
+        _sum: { medicinesTotal: true, deliveryPrice: true, totalPrice: true }
+      }),
+      prisma.order.groupBy({ by: ['status'], _count: { id: true } }),
+      prisma.order.groupBy({
+        by: ['selectedCourier'],
+        where: { selectedCourier: { not: null } },
+        _count: { id: true }
+      }),
+      prisma.order.findMany({
+        where: { createdAt: { gte: thirtyDaysAgo } },
+        select: { createdAt: true },
+        orderBy: { createdAt: 'asc' }
+      })
+    ])
+
+    // Group recent orders by day
+    const ordersByDay = {}
+    recentOrders.forEach(o => {
+      const day = o.createdAt.toISOString().split('T')[0]
+      ordersByDay[day] = (ordersByDay[day] || 0) + 1
+    })
+
+    res.json({
+      success: true,
+      data: {
+        totalOrders,
+        activePharmacies,
+        totalMedicinesAmount: aggregates._sum.medicinesTotal || 0,
+        totalDeliveryAmount: aggregates._sum.deliveryPrice || 0,
+        totalRevenue: aggregates._sum.totalPrice || 0,
+        ordersByStatus: ordersByStatus.map(s => ({ status: s.status, count: s._count.id })),
+        ordersByCourier: ordersByCourier.map(c => ({ courier: c.selectedCourier, count: c._count.id })),
+        ordersByDay: Object.entries(ordersByDay).map(([date, count]) => ({ date, count }))
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+module.exports = router

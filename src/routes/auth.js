@@ -1,141 +1,79 @@
-const express = require('express');
-const jwt = require('jsonwebtoken');
-const Pharmacy = require('../models/Pharmacy');
-const Admin = require('../models/Admin');
+const express = require('express')
+const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
+const prisma = require('../config/db')
 
-const router = express.Router();
+const router = express.Router()
 
-/**
- * Generate a signed JWT for the given payload.
- */
-const signToken = (payload) => {
-  return jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  });
-};
-
-// ---------------------------------------------------------------------------
 // POST /api/auth/pharmacy/login
-// ---------------------------------------------------------------------------
-router.post('/pharmacy/login', async (req, res) => {
+router.post('/pharmacy/login', async (req, res, next) => {
   try {
-    const { login, password } = req.body;
-
+    const { login, password } = req.body
     if (!login || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Login and password are required.',
-      });
+      return res.status(400).json({ success: false, message: 'Login and password required' })
     }
-
-    const pharmacy = await Pharmacy.findOne({ login: login.trim() });
-
+    const pharmacy = await prisma.pharmacy.findUnique({ where: { login } })
     if (!pharmacy) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials.',
-      });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' })
     }
-
-    const isMatch = await pharmacy.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials.',
-      });
-    }
-
     if (!pharmacy.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: 'Pharmacy account is inactive.',
-      });
+      return res.status(403).json({ success: false, message: 'Account inactive or subscription expired' })
     }
-
     if (pharmacy.subscriptionExpiry && pharmacy.subscriptionExpiry < new Date()) {
-      return res.status(403).json({
-        success: false,
-        message: 'Pharmacy subscription has expired.',
-      });
+      await prisma.pharmacy.update({ where: { id: pharmacy.id }, data: { isActive: false } })
+      return res.status(403).json({ success: false, message: 'Subscription expired' })
     }
-
-    const token = signToken({ id: pharmacy._id, role: 'pharmacy' });
-
-    return res.status(200).json({
+    const valid = await bcrypt.compare(password, pharmacy.password)
+    if (!valid) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' })
+    }
+    const token = jwt.sign(
+      { id: pharmacy.id, role: 'pharmacy', name: pharmacy.name },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    )
+    res.json({
       success: true,
-      message: 'Login successful.',
       data: {
         token,
-        pharmacy: {
-          id: pharmacy._id,
-          name: pharmacy.name,
-          login: pharmacy.login,
-          isActive: pharmacy.isActive,
-          subscriptionExpiry: pharmacy.subscriptionExpiry,
-        },
-      },
-    });
-  } catch (error) {
-    console.error('Pharmacy login error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error during login.',
-    });
+        user: { id: pharmacy.id, role: 'pharmacy', name: pharmacy.name }
+      }
+    })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-// ---------------------------------------------------------------------------
 // POST /api/auth/admin/login
-// ---------------------------------------------------------------------------
-router.post('/admin/login', async (req, res) => {
+router.post('/admin/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-
+    const { email, password } = req.body
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required.',
-      });
+      return res.status(400).json({ success: false, message: 'Email and password required' })
     }
-
-    const admin = await Admin.findOne({ email: email.toLowerCase().trim() });
-
+    const admin = await prisma.admin.findUnique({ where: { email } })
     if (!admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials.',
-      });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' })
     }
-
-    const isMatch = await admin.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials.',
-      });
+    const valid = await bcrypt.compare(password, admin.password)
+    if (!valid) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' })
     }
-
-    const token = signToken({ id: admin._id, role: 'admin' });
-
-    return res.status(200).json({
+    const token = jwt.sign(
+      { id: admin.id, role: 'admin' },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    )
+    res.json({
       success: true,
-      message: 'Login successful.',
       data: {
         token,
-        admin: {
-          id: admin._id,
-          email: admin.email,
-          role: admin.role,
-        },
-      },
-    });
-  } catch (error) {
-    console.error('Admin login error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error during login.',
-    });
+        user: { id: admin.id, role: 'admin' }
+      }
+    })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-module.exports = router;
+module.exports = router

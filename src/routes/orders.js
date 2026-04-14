@@ -1,233 +1,115 @@
-const express = require('express');
-const Order = require('../models/Order');
-const { auth } = require('../middleware/auth');
-const checkSubscription = require('../middleware/checkSubscription');
+const express = require('express')
+const prisma = require('../config/db')
+const { auth } = require('../middleware/auth')
 
-const router = express.Router();
+const router = express.Router()
 
-// Valid status transitions (enforced on PUT /status)
-const VALID_STATUSES = [
-  'pending',
-  'confirmed',
-  'courier_pickup',
-  'courier_picked',
-  'courier_delivery',
-  'delivered',
-];
-
-// ---------------------------------------------------------------------------
-// GET /api/orders/:token
-// Public: get order details by unique token.
-// ---------------------------------------------------------------------------
-router.get('/:token', async (req, res) => {
+// GET /api/orders/:token — public
+router.get('/:token', async (req, res, next) => {
   try {
-    const order = await Order.findOne({ token: req.params.token })
-      .populate('pharmacy', 'name address phone coordinates')
-      .lean();
-
+    const order = await prisma.order.findUnique({
+      where: { token: req.params.token },
+      include: {
+        pharmacy: {
+          select: { name: true, address: true, phone: true, lat: true, lng: true }
+        }
+      }
+    })
     if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found.',
-      });
+      return res.status(404).json({ success: false, message: 'Order not found' })
     }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Order retrieved successfully.',
-      data: order,
-    });
-  } catch (error) {
-    console.error('Get order by token error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error retrieving order.',
-    });
+    // Flatten pharmacy coords onto order for frontend convenience
+    const response = {
+      ...order,
+      pharmacyName: order.pharmacy.name,
+      pharmacyAddress: order.pharmacy.address,
+      pharmacyPhone: order.pharmacy.phone,
+      pharmacyLat: order.pharmacy.lat,
+      pharmacyLng: order.pharmacy.lng,
+    }
+    res.json({ success: true, data: response })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-// ---------------------------------------------------------------------------
-// PUT /api/orders/:token/customer
-// Public: customer fills in delivery details.
-// Body: { name, phone, address, comment?, coordinates? }
-// ---------------------------------------------------------------------------
-router.put('/:token/customer', async (req, res) => {
+// PUT /api/orders/:token/customer — fill customer details
+router.put('/:token/customer', async (req, res, next) => {
   try {
-    const { name, phone, address, comment, coordinates } = req.body;
-
+    const { name, phone, address, comment, coordinates } = req.body
     if (!name || !phone || !address) {
-      return res.status(400).json({
-        success: false,
-        message: 'name, phone and address are required.',
-      });
+      return res.status(400).json({ success: false, message: 'name, phone, address required' })
     }
-
-    const order = await Order.findOne({ token: req.params.token });
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found.',
-      });
-    }
-
+    const order = await prisma.order.findUnique({ where: { token: req.params.token } })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
     if (order.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: 'Customer details can only be set when order is pending.',
-      });
+      return res.status(400).json({ success: false, message: 'Order already confirmed' })
     }
-
-    order.customer = {
-      name: name.trim(),
-      phone: phone.trim(),
-      address: address.trim(),
-      comment: comment ? comment.trim() : '',
-      coordinates: coordinates
-        ? { lat: coordinates.lat, lng: coordinates.lng }
-        : undefined,
-    };
-
-    await order.save();
-
-    return res.status(200).json({
-      success: true,
-      message: 'Customer details saved successfully.',
-      data: order,
-    });
-  } catch (error) {
-    console.error('Update customer details error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error updating customer details.',
-    });
+    const updated = await prisma.order.update({
+      where: { token: req.params.token },
+      data: {
+        customerName: name,
+        customerPhone: phone,
+        customerAddress: address,
+        customerComment: comment || null,
+        customerLat: coordinates?.lat ?? null,
+        customerLng: coordinates?.lng ?? null,
+      }
+    })
+    res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-// ---------------------------------------------------------------------------
-// PUT /api/orders/:token/courier
-// Public: customer selects courier and pays.
-// Body: { selectedCourier, deliveryPrice, trackingUrl? }
-// ---------------------------------------------------------------------------
-router.put('/:token/courier', async (req, res) => {
+// PUT /api/orders/:token/courier — select courier & confirm
+router.put('/:token/courier', async (req, res, next) => {
   try {
-    const { selectedCourier, deliveryPrice, trackingUrl } = req.body;
-
-    if (!selectedCourier || deliveryPrice === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: 'selectedCourier and deliveryPrice are required.',
-      });
+    const { selectedCourier, deliveryPrice, trackingUrl } = req.body
+    if (!selectedCourier) {
+      return res.status(400).json({ success: false, message: 'selectedCourier required' })
     }
-
-    const allowedCouriers = ['yandex', 'noor', 'millennium'];
-    if (!allowedCouriers.includes(selectedCourier)) {
-      return res.status(400).json({
-        success: false,
-        message: `selectedCourier must be one of: ${allowedCouriers.join(', ')}.`,
-      });
-    }
-
-    const order = await Order.findOne({ token: req.params.token });
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found.',
-      });
-    }
-
-    if (order.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: 'Courier can only be selected while order is pending.',
-      });
-    }
-
-    if (!order.customer || !order.customer.name) {
-      return res.status(400).json({
-        success: false,
-        message: 'Customer details must be filled before selecting a courier.',
-      });
-    }
-
-    order.selectedCourier = selectedCourier;
-    order.deliveryPrice = Number(deliveryPrice);
-    order.trackingUrl = trackingUrl ? trackingUrl.trim() : '';
-    order.totalPrice = (order.medicinesTotal || 0) + Number(deliveryPrice);
-    order.status = 'confirmed';
-
-    await order.save();
-
-    return res.status(200).json({
-      success: true,
-      message: 'Courier selected and order confirmed.',
-      data: order,
-    });
-  } catch (error) {
-    console.error('Select courier error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error selecting courier.',
-    });
+    const order = await prisma.order.findUnique({ where: { token: req.params.token } })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+    const delivery = Number(deliveryPrice) || 0
+    const updated = await prisma.order.update({
+      where: { token: req.params.token },
+      data: {
+        selectedCourier,
+        deliveryPrice: delivery,
+        trackingUrl: trackingUrl || null,
+        totalPrice: order.medicinesTotal + delivery,
+        status: 'confirmed',
+      }
+    })
+    res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-// ---------------------------------------------------------------------------
-// PUT /api/orders/:token/status
-// Protected (pharmacy JWT): update order status.
-// Body: { status }
-// ---------------------------------------------------------------------------
-router.put('/:token/status', auth, checkSubscription, async (req, res) => {
+// PUT /api/orders/:token/status — update status (pharmacy auth)
+router.put('/:token/status', auth, async (req, res, next) => {
   try {
-    const { status } = req.body;
-
-    if (!status) {
-      return res.status(400).json({
-        success: false,
-        message: 'status is required.',
-      });
+    const { status } = req.body
+    const validStatuses = ['pending', 'confirmed', 'courier_pickup', 'courier_picked', 'courier_delivery', 'delivered']
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' })
     }
-
-    if (!VALID_STATUSES.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: `status must be one of: ${VALID_STATUSES.join(', ')}.`,
-      });
+    const order = await prisma.order.findUnique({ where: { token: req.params.token } })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+    // Pharmacy can only update their own orders
+    if (req.user.role === 'pharmacy' && order.pharmacyId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Forbidden' })
     }
-
-    const order = await Order.findOne({ token: req.params.token });
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found.',
-      });
-    }
-
-    // Ensure the pharmacy owns this order
-    if (order.pharmacy.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access forbidden: this order does not belong to your pharmacy.',
-      });
-    }
-
-    order.status = status;
-    await order.save();
-
-    return res.status(200).json({
-      success: true,
-      message: `Order status updated to "${status}".`,
-      data: order,
-    });
-  } catch (error) {
-    console.error('Update order status error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error updating order status.',
-    });
+    const updated = await prisma.order.update({
+      where: { token: req.params.token },
+      data: { status }
+    })
+    res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-module.exports = router;
+module.exports = router

@@ -1,74 +1,50 @@
-const express = require('express');
-const Order = require('../models/Order');
-const { auth } = require('../middleware/auth');
-const checkSubscription = require('../middleware/checkSubscription');
+const express = require('express')
+const { customAlphabet } = require('nanoid')
+const prisma = require('../config/db')
+const { auth } = require('../middleware/auth')
+const { checkSubscription } = require('../middleware/checkSubscription')
 
-const router = express.Router();
+const router = express.Router()
+const generateToken = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 12)
 
-// Apply auth + subscription check to all pharmacy routes
-router.use(auth, checkSubscription);
+// All pharmacy routes require auth + active subscription
+router.use(auth)
+router.use(checkSubscription)
 
-// ---------------------------------------------------------------------------
 // GET /api/pharmacy/orders
-// Returns all orders belonging to the authenticated pharmacy, newest first.
-// ---------------------------------------------------------------------------
-router.get('/orders', async (req, res) => {
+router.get('/orders', async (req, res, next) => {
   try {
-    const orders = await Order.find({ pharmacy: req.user.id })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return res.status(200).json({
-      success: true,
-      message: 'Orders retrieved successfully.',
-      data: orders,
-    });
-  } catch (error) {
-    console.error('Get pharmacy orders error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error retrieving orders.',
-    });
+    const orders = await prisma.order.findMany({
+      where: { pharmacyId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+    })
+    res.json({ success: true, data: orders })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-// ---------------------------------------------------------------------------
 // POST /api/pharmacy/orders
-// Create a new order for the authenticated pharmacy.
-// Body: { pharmacyComment?, medicinesTotal? }
-// ---------------------------------------------------------------------------
-router.post('/orders', async (req, res) => {
+router.post('/orders', async (req, res, next) => {
   try {
-    const { pharmacyComment, medicinesTotal } = req.body;
-
-    const order = new Order({
-      pharmacy: req.user.id,
-      pharmacyComment: pharmacyComment || '',
-      medicinesTotal: medicinesTotal !== undefined ? Number(medicinesTotal) : 0,
-      // token is auto-generated in the model pre-validate hook
-    });
-
-    await order.save();
-
-    // Build the customer-facing link using CLIENT_URL
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const orderLink = `${clientUrl}/order/${order.token}`;
-
-    return res.status(201).json({
-      success: true,
-      message: 'Order created successfully.',
+    const { pharmacyComment, medicinesTotal } = req.body
+    if (!medicinesTotal || isNaN(Number(medicinesTotal))) {
+      return res.status(400).json({ success: false, message: 'medicinesTotal is required' })
+    }
+    const token = generateToken()
+    const order = await prisma.order.create({
       data: {
-        order,
-        orderLink,
+        token,
+        pharmacyId: req.user.id,
+        pharmacyComment: pharmacyComment || null,
+        medicinesTotal: Number(medicinesTotal),
       },
-    });
-  } catch (error) {
-    console.error('Create pharmacy order error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error creating order.',
-    });
+    })
+    const orderLink = `${process.env.CLIENT_URL}/order/${token}`
+    res.status(201).json({ success: true, data: { ...order, orderLink } })
+  } catch (err) {
+    next(err)
   }
-});
+})
 
-module.exports = router;
+module.exports = router

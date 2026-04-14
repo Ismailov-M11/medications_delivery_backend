@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+}
+
+model Pharmacy {
+  id                 String    @id @default(cuid())
+  name               String
+  address            String
+  phone              String
+  lat                Float?
+  lng                Float?
+  login              String    @unique
+  password           String
+  isActive           Boolean   @default(true)
+  subscriptionExpiry DateTime?
+  createdAt          DateTime  @default(now())
+  orders             Order[]
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  token           String      @unique
+  pharmacyId      String
+  pharmacy        Pharmacy    @relation(fields: [pharmacyId], references: [id])
+  status          OrderStatus @default(pending)
+  pharmacyComment String?
+  medicinesTotal  Float
+
+  customerName    String?
+  customerPhone   String?
+  customerAddress String?
+  customerComment String?
+  customerLat     Float?
+  customerLng     Float?
+
+  selectedCourier CourierType?
+  deliveryPrice   Float?
+  trackingUrl     String?
+  totalPrice      Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  courier_pickup
+  courier_picked
+  courier_delivery
+  delivered
+}
+
+enum CourierType {
+  yandex
+  noor
+  millennium
+}
