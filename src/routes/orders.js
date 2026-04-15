@@ -101,13 +101,8 @@ router.post('/:token/noor/evaluate', async (req, res, next) => {
     const available = stage === 1
     const errorMessage = available ? null : (NOOR_EVAL_ERRORS[stage] || `Ошибка оценки (stage ${stage})`)
 
-    // Extract delivery price from response (field name varies by Noor API version)
-    const price =
-      result?.pricing?.delivery_price ??
-      result?.pricing?.price ??
-      result?.delivery_price ??
-      result?.price ??
-      null
+    // Extract delivery price from Noor evaluate response
+    const price = result?.total_delivery_price ?? null
 
     res.json({ success: true, data: { available, stage, price, error: errorMessage } })
   } catch (err) {
