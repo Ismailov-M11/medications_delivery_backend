@@ -84,20 +84,37 @@ router.post('/pharmacies', async (req, res, next) => {
 // PUT /api/admin/pharmacies/:id
 router.put('/pharmacies/:id', async (req, res, next) => {
   try {
-    const { name, address, phone, isActive, subscriptionExpiry } = req.body
+    const { name, address, phone, isActive, subscriptionExpiry, login, password, lat, lng } = req.body
     const data = {}
     if (name !== undefined) data.name = name
     if (address !== undefined) data.address = address
     if (phone !== undefined) data.phone = phone
     if (isActive !== undefined) data.isActive = Boolean(isActive)
     if (subscriptionExpiry !== undefined) data.subscriptionExpiry = subscriptionExpiry ? new Date(subscriptionExpiry) : null
+    if (lat !== undefined) data.lat = lat ? Number(lat) : null
+    if (lng !== undefined) data.lng = lng ? Number(lng) : null
+
+    if (login !== undefined && login.trim()) {
+      // Check login uniqueness (exclude current pharmacy)
+      const exists = await prisma.pharmacy.findFirst({
+        where: { login: login.trim(), NOT: { id: req.params.id } }
+      })
+      if (exists) {
+        return res.status(409).json({ success: false, message: 'Login already taken by another pharmacy' })
+      }
+      data.login = login.trim()
+    }
+
+    if (password !== undefined && password.trim()) {
+      data.password = await bcrypt.hash(password.trim(), 10)
+    }
 
     const pharmacy = await prisma.pharmacy.update({
       where: { id: req.params.id },
       data,
       select: {
-        id: true, name: true, address: true, phone: true,
-        isActive: true, subscriptionExpiry: true, createdAt: true
+        id: true, name: true, address: true, phone: true, login: true,
+        lat: true, lng: true, isActive: true, subscriptionExpiry: true, createdAt: true
       }
     })
     res.json({ success: true, data: pharmacy })
