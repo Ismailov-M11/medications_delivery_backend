@@ -33,12 +33,12 @@ router.get('/:token', async (req, res, next) => {
   }
 })
 
-// PUT /api/orders/:token/customer — fill customer details
-router.put('/:token/customer', async (req, res, next) => {
+// PUT /api/orders/:token/confirm — fill customer details
+router.put('/:token/confirm', async (req, res, next) => {
   try {
-    const { name, phone, address, comment, coordinates } = req.body
-    if (!name || !phone || !address) {
-      return res.status(400).json({ success: false, message: 'name, phone, address required' })
+    const { customerName, customerPhone, customerAddress, customerComment, customerLat, customerLng } = req.body
+    if (!customerName || !customerPhone || !customerAddress) {
+      return res.status(400).json({ success: false, message: 'customerName, customerPhone, customerAddress required' })
     }
     const order = await prisma.order.findUnique({ where: { token: req.params.token } })
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
@@ -48,12 +48,12 @@ router.put('/:token/customer', async (req, res, next) => {
     const updated = await prisma.order.update({
       where: { token: req.params.token },
       data: {
-        customerName: name,
-        customerPhone: phone,
-        customerAddress: address,
-        customerComment: comment || null,
-        customerLat: coordinates?.lat ?? null,
-        customerLng: coordinates?.lng ?? null,
+        customerName,
+        customerPhone,
+        customerAddress,
+        customerComment: customerComment || null,
+        customerLat: customerLat ?? null,
+        customerLng: customerLng ?? null,
       }
     })
     res.json({ success: true, data: updated })
@@ -65,9 +65,10 @@ router.put('/:token/customer', async (req, res, next) => {
 // PUT /api/orders/:token/courier — select courier & confirm
 router.put('/:token/courier', async (req, res, next) => {
   try {
-    const { selectedCourier, deliveryPrice, trackingUrl } = req.body
-    if (!selectedCourier) {
-      return res.status(400).json({ success: false, message: 'selectedCourier required' })
+    const { courier, selectedCourier, deliveryPrice, trackingUrl } = req.body
+    const courierValue = courier || selectedCourier
+    if (!courierValue) {
+      return res.status(400).json({ success: false, message: 'courier required' })
     }
     const order = await prisma.order.findUnique({ where: { token: req.params.token } })
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
@@ -75,7 +76,7 @@ router.put('/:token/courier', async (req, res, next) => {
     const updated = await prisma.order.update({
       where: { token: req.params.token },
       data: {
-        selectedCourier,
+        selectedCourier: courierValue,
         deliveryPrice: delivery,
         trackingUrl: trackingUrl || null,
         totalPrice: order.medicinesTotal + delivery,
