@@ -18,7 +18,7 @@ router.get('/orders', async (req, res, next) => {
       where: { pharmacyId: req.user.id },
       orderBy: { createdAt: 'desc' },
     })
-    res.json({ success: true, data: orders })
+    res.json({ success: true, data: { orders } })
   } catch (err) {
     next(err)
   }
@@ -40,8 +40,8 @@ router.post('/orders', async (req, res, next) => {
         medicinesTotal: Number(medicinesTotal),
       },
     })
-    const orderLink = `${process.env.CLIENT_URL}/order/${token}`
-    res.status(201).json({ success: true, data: { ...order, orderLink } })
+    const orderUrl = `${process.env.CLIENT_URL}/order/${token}`
+    res.status(201).json({ success: true, data: { order, orderUrl } })
   } catch (err) {
     next(err)
   }
