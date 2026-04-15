@@ -36,7 +36,11 @@ router.get('/:token', async (req, res, next) => {
 // PUT /api/orders/:token/confirm — fill customer details
 router.put('/:token/confirm', async (req, res, next) => {
   try {
-    const { customerName, customerPhone, customerAddress, customerComment, customerLat, customerLng } = req.body
+    const {
+      customerName, customerPhone, customerAddress, customerComment,
+      customerLat, customerLng,
+      apartment, entrance, floor, intercom,
+    } = req.body
     if (!customerName || !customerPhone || !customerAddress) {
       return res.status(400).json({ success: false, message: 'customerName, customerPhone, customerAddress required' })
     }
@@ -51,6 +55,10 @@ router.put('/:token/confirm', async (req, res, next) => {
         customerName,
         customerPhone,
         customerAddress,
+        apartment:  apartment  || null,
+        entrance:   entrance   || null,
+        floor:      floor      || null,
+        intercom:   intercom   || null,
         customerComment: customerComment || null,
         customerLat: customerLat ?? null,
         customerLng: customerLng ?? null,

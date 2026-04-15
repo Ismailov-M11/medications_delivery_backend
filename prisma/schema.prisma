@@ -42,6 +42,10 @@ model Order {
   customerName    String?
   customerPhone   String?
   customerAddress String?
+  apartment       String?
+  entrance        String?
+  floor           String?
+  intercom        String?
   customerComment String?
   customerLat     Float?
   customerLng     Float?
