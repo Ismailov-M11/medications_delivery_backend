@@ -1,6 +1,13 @@
 const express = require('express')
 const prisma = require('../config/db')
 const { auth } = require('../middleware/auth')
+const noorApi = require('../utils/noorApi')
+
+const NOOR_EVAL_ERRORS = {
+  23: 'Недостаточно средств на балансе Noor',
+  27: 'Нет свободных курьеров в вашем районе',
+  28: 'Адрес доставки вне зоны обслуживания Noor',
+}
 
 const router = express.Router()
 
@@ -78,9 +85,56 @@ router.put('/:token/courier', async (req, res, next) => {
     if (!courierValue) {
       return res.status(400).json({ success: false, message: 'courier required' })
     }
-    const order = await prisma.order.findUnique({ where: { token: req.params.token } })
+
+    const order = await prisma.order.findUnique({
+      where: { token: req.params.token },
+      include: { pharmacy: { select: { lat: true, lng: true, address: true, phone: true, name: true } } },
+    })
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+
     const delivery = Number(deliveryPrice) || 0
+
+    // ── Noor Express ──────────────────────────────────────────────────
+    if (courierValue === 'noor') {
+      if (!order.customerLat || !order.customerLng) {
+        return res.status(400).json({ success: false, message: 'Координаты клиента не указаны' })
+      }
+      if (!order.pharmacy.lat || !order.pharmacy.lng) {
+        return res.status(400).json({ success: false, message: 'Координаты аптеки не настроены' })
+      }
+
+      // 1. Evaluate
+      const evalResult = await noorApi.evaluate(
+        order.pharmacy.lat, order.pharmacy.lng,
+        order.customerLat, order.customerLng,
+      )
+      const stage = evalResult?.evaluated_stage
+      if (stage !== 1) {
+        const message = NOOR_EVAL_ERRORS[stage] || `Noor: ошибка оценки (stage ${stage})`
+        return res.status(400).json({ success: false, message })
+      }
+
+      // 2. Create order in Noor
+      const noorResponse = await noorApi.createOrder({
+        ...order,
+        pharmacy: order.pharmacy,
+      })
+      const noorOrderId = noorResponse?.order?.id ?? null
+
+      const updated = await prisma.order.update({
+        where: { token: req.params.token },
+        data: {
+          selectedCourier: courierValue,
+          deliveryPrice: delivery,
+          noorOrderId,
+          totalPrice: order.medicinesTotal + delivery,
+          status: 'confirmed',
+        },
+      })
+      return res.json({ success: true, data: updated })
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     const updated = await prisma.order.update({
       where: { token: req.params.token },
       data: {
@@ -89,7 +143,7 @@ router.put('/:token/courier', async (req, res, next) => {
         trackingUrl: trackingUrl || null,
         totalPrice: order.medicinesTotal + delivery,
         status: 'confirmed',
-      }
+      },
     })
     res.json({ success: true, data: updated })
   } catch (err) {

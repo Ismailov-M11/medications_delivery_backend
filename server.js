@@ -11,6 +11,7 @@ const authRoutes = require('./src/routes/auth')
 const pharmacyRoutes = require('./src/routes/pharmacy')
 const ordersRoutes = require('./src/routes/orders')
 const adminRoutes = require('./src/routes/admin')
+const noorRoutes = require('./src/routes/noor')
 
 const app = express()
 
@@ -25,6 +26,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/pharmacy', pharmacyRoutes)
 app.use('/api/orders', ordersRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/noor', noorRoutes)
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }))
 
