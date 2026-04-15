@@ -77,6 +77,44 @@ router.put('/:token/confirm', async (req, res, next) => {
   }
 })
 
+// POST /api/orders/:token/noor/evaluate — get Noor price & availability before confirming
+router.post('/:token/noor/evaluate', async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { token: req.params.token },
+      include: { pharmacy: { select: { lat: true, lng: true } } },
+    })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+    if (!order.customerLat || !order.customerLng) {
+      return res.status(400).json({ success: false, message: 'Координаты клиента не указаны' })
+    }
+    if (!order.pharmacy.lat || !order.pharmacy.lng) {
+      return res.status(400).json({ success: false, message: 'Координаты аптеки не настроены' })
+    }
+
+    const result = await noorApi.evaluate(
+      order.pharmacy.lat, order.pharmacy.lng,
+      order.customerLat, order.customerLng,
+    )
+
+    const stage = result?.evaluated_stage
+    const available = stage === 1
+    const errorMessage = available ? null : (NOOR_EVAL_ERRORS[stage] || `Ошибка оценки (stage ${stage})`)
+
+    // Extract delivery price from response (field name varies by Noor API version)
+    const price =
+      result?.pricing?.delivery_price ??
+      result?.pricing?.price ??
+      result?.delivery_price ??
+      result?.price ??
+      null
+
+    res.json({ success: true, data: { available, stage, price, error: errorMessage } })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // PUT /api/orders/:token/courier — select courier & confirm
 router.put('/:token/courier', async (req, res, next) => {
   try {
