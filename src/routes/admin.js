@@ -47,7 +47,7 @@ router.get('/pharmacies', async (req, res, next) => {
         _count: { select: { orders: true } }
       }
     })
-    res.json({ success: true, data: pharmacies })
+    res.json({ success: true, data: { pharmacies } })
   } catch (err) {
     next(err)
   }
