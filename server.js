@@ -12,6 +12,7 @@ const pharmacyRoutes = require('./src/routes/pharmacy')
 const ordersRoutes = require('./src/routes/orders')
 const adminRoutes = require('./src/routes/admin')
 const noorRoutes = require('./src/routes/noor')
+const millenniumRoutes = require('./src/routes/millennium')
 
 const app = express()
 
@@ -27,6 +28,7 @@ app.use('/api/pharmacy', pharmacyRoutes)
 app.use('/api/orders', ordersRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/noor', noorRoutes)
+app.use('/api/millennium', millenniumRoutes)
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }))
 

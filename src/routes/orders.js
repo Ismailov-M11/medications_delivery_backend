@@ -2,6 +2,7 @@ const express = require('express')
 const prisma = require('../config/db')
 const { auth } = require('../middleware/auth')
 const noorApi = require('../utils/noorApi')
+const millenniumApi = require('../utils/millenniumApi')
 
 const NOOR_EVAL_ERRORS = {
   23: 'Недостаточно средств на балансе Noor',
@@ -160,6 +161,35 @@ router.put('/:token/courier', async (req, res, next) => {
           selectedCourier: courierValue,
           deliveryPrice: delivery,
           noorOrderId,
+          totalPrice: order.medicinesTotal + delivery,
+          status: 'confirmed',
+        },
+      })
+      return res.json({ success: true, data: updated })
+    }
+    // ─────────────────────────────────────────────────────────────────
+
+    // ── Millennium ────────────────────────────────────────────────────
+    if (courierValue === 'millennium') {
+      if (!order.customerLat || !order.customerLng) {
+        return res.status(400).json({ success: false, message: 'Координаты клиента не указаны' })
+      }
+      if (!order.pharmacy.lat || !order.pharmacy.lng) {
+        return res.status(400).json({ success: false, message: 'Координаты аптеки не настроены' })
+      }
+
+      const tmResponse = await millenniumApi.createOrder({
+        ...order,
+        pharmacy: order.pharmacy,
+      })
+      const millenniumOrderId = tmResponse?.data?.order_id ?? null
+
+      const updated = await prisma.order.update({
+        where: { token: req.params.token },
+        data: {
+          selectedCourier: courierValue,
+          deliveryPrice: delivery,
+          millenniumOrderId,
           totalPrice: order.medicinesTotal + delivery,
           status: 'confirmed',
         },
