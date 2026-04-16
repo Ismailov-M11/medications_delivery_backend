@@ -111,6 +111,33 @@ router.post('/:token/noor/evaluate', async (req, res, next) => {
   }
 })
 
+// POST /api/orders/:token/millennium/evaluate — get Millennium price before confirming
+router.post('/:token/millennium/evaluate', async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { token: req.params.token },
+      include: { pharmacy: { select: { lat: true, lng: true } } },
+    })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+    if (!order.customerLat || !order.customerLng) {
+      return res.status(400).json({ success: false, message: 'Координаты клиента не указаны' })
+    }
+    if (!order.pharmacy.lat || !order.pharmacy.lng) {
+      return res.status(400).json({ success: false, message: 'Координаты аптеки не настроены' })
+    }
+
+    const price = await millenniumApi.calcOrderCost(
+      order.pharmacy.lat, order.pharmacy.lng,
+      order.customerLat, order.customerLng,
+    )
+
+    res.json({ success: true, data: { available: true, price } })
+  } catch (err) {
+    // calcOrderCost throws on API error — treat as unavailable
+    res.json({ success: true, data: { available: false, price: null, error: err.message } })
+  }
+})
+
 // PUT /api/orders/:token/courier — select courier & confirm
 router.put('/:token/courier', async (req, res, next) => {
   try {
