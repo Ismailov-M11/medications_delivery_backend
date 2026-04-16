@@ -77,9 +77,12 @@ async function createOrder(order, acceptLanguage = 'ru') {
 
   const floor = order.floor && /^\d+$/.test(order.floor) ? parseInt(order.floor) : null
 
+  const productName = order.pharmacyComment || 'Медикаменты'
+
   const body = {
     vendor_order_id: String(order.id),
     is_business: true,
+    is_paid: true,
     ...(NOOR_ACCOUNT_ID && { accountId: NOOR_ACCOUNT_ID }),
     payment_type: 'BALANCE',
     origin: [{
@@ -96,7 +99,7 @@ async function createOrder(order, acceptLanguage = 'ru') {
         name: order.pharmacy.name,
         email: '',
       },
-      products: { type_id: 1, description: 'Медикаменты', items: [] },
+      products: { type_id: 1, description: productName, items: [] },
     }],
     destination: [{
       location: { long: order.customerLng, lat: order.customerLat },
@@ -114,9 +117,9 @@ async function createOrder(order, acceptLanguage = 'ru') {
       },
       products: {
         type_id: 1,
-        description: 'Медикаменты',
+        description: productName,
         items: [{
-          name: 'Медикаменты',
+          name: productName,
           price_per_unit: Math.round(order.medicinesTotal),
           quantity: 1,
           weight: null,
