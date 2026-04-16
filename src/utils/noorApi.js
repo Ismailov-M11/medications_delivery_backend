@@ -1,5 +1,6 @@
-const NOOR_HOST = process.env.NOOR_HOST
-const NOOR_TOKEN = process.env.NOOR_TOKEN
+const NOOR_HOST       = process.env.NOOR_HOST
+const NOOR_TOKEN      = process.env.NOOR_TOKEN
+const NOOR_ACCOUNT_ID = process.env.NOOR_ACCOUNT_ID || null
 
 function normalizePhone(phone) {
   if (!phone) return ''
@@ -52,6 +53,7 @@ async function createOrder(order, acceptLanguage = 'uz') {
   const body = {
     vendor_order_id: order.id,
     payment_type: 'BALANCE',
+    ...(NOOR_ACCOUNT_ID && { accountId: NOOR_ACCOUNT_ID }),
     origin: [
       {
         location: { lon: order.pharmacy.lng, lat: order.pharmacy.lat },
