@@ -16,7 +16,7 @@ function noorHeaders(extra = {}) {
 }
 
 function noorDelivery() {
-  return { door_to_door: true, equipment_id: 1, type: 'EXPRESS', time: null }
+  return { door_to_door: true, equipment_id: 1, type: 'EXPRESS', send_link: true, product_paid: true, time: null }
 }
 
 /**
@@ -53,7 +53,7 @@ async function evaluate(orgLat, orgLon, destLat, destLon) {
       client: { phone: '', name: 'Получатель', email: '' },
       products: { type_id: 1, description: 'Медикаменты', items: [] },
     }],
-    payment_type: 'BALANCE',
+    payment_type: 'CASH',
     delivery: noorDelivery(),
   }
 
@@ -84,7 +84,7 @@ async function createOrder(order, acceptLanguage = 'ru') {
     is_business: true,
     is_paid: true,
     ...(NOOR_ACCOUNT_ID && { accountId: NOOR_ACCOUNT_ID }),
-    payment_type: 'BALANCE',
+    payment_type: 'CASH',
     origin: [{
       location: { long: order.pharmacy.lng, lat: order.pharmacy.lat },
       order: 1,
