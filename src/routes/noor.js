@@ -18,8 +18,12 @@ const STAGE_STATUS = {
 // POST /api/noor/webhook — called by Noor on status changes
 router.post('/webhook', async (req, res) => {
   try {
+    console.log('[Noor webhook] headers:', JSON.stringify(req.headers))
+    console.log('[Noor webhook] body:', JSON.stringify(req.body))
+
     const authHeader = req.headers['authorization']
     if (!authHeader || authHeader !== WEBHOOK_TOKEN) {
+      console.log('[Noor webhook] Unauthorized — received token:', authHeader)
       return res.status(401).json({ success: false, message: 'Unauthorized' })
     }
 
