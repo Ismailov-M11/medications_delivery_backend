@@ -4,6 +4,8 @@ const noorApi = require('../utils/noorApi')
 
 const router = express.Router()
 
+const WEBHOOK_TOKEN = process.env.NOOR_WEBHOOK_TOKEN
+
 // Noor stage → our OrderStatus mapping
 const STAGE_STATUS = {
   4: 'courier_pickup',   // performer found
@@ -16,6 +18,11 @@ const STAGE_STATUS = {
 // POST /api/noor/webhook — called by Noor on status changes
 router.post('/webhook', async (req, res) => {
   try {
+    const authHeader = req.headers['authorization']
+    if (!authHeader || authHeader !== WEBHOOK_TOKEN) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' })
+    }
+
     const { vendor_order_id, stage, order: noorOrder } = req.body
 
     if (!vendor_order_id) {
