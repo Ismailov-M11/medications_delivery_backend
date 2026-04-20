@@ -3,8 +3,6 @@ const prisma = require('../config/db')
 
 const router = express.Router()
 
-const WEBHOOK_TOKEN = process.env.MILLENNIUM_WEBHOOK_TOKEN // e.g. yaycol9Knud
-
 // Map Millennium state_id → our OrderStatus
 // Based on TaxiMaster state list from Millennium
 const STATE_MAP = {
@@ -21,12 +19,6 @@ const STATE_MAP = {
 // POST /api/millennium/webhook — called by Millennium on status changes
 router.post('/webhook', async (req, res) => {
   try {
-    // Verify auth token
-    const authHeader = req.headers['authorization']
-    if (!authHeader || authHeader !== WEBHOOK_TOKEN) {
-      return res.status(401).json({ success: false, message: 'Unauthorized' })
-    }
-
     const {
       order_id,
       state_id,
