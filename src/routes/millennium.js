@@ -19,6 +19,9 @@ const STATE_MAP = {
 // POST /api/millennium/webhook — called by Millennium on status changes
 router.post('/webhook', async (req, res) => {
   try {
+    console.log('[Millennium webhook] headers:', JSON.stringify(req.headers))
+    console.log('[Millennium webhook] body:', JSON.stringify(req.body))
+
     const {
       order_id,
       state_id,
