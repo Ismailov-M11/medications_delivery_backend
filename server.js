@@ -18,7 +18,22 @@ const app = express()
 
 // Middleware
 app.use(helmet())
-app.use(cors({ origin: process.env.CLIENT_URL || '*', credentials: true }))
+const ALLOWED_ORIGINS = [
+  process.env.CLIENT_URL,
+  'https://tezyubor.uz',
+  'https://www.tezyubor.uz',
+  'https://app.tezyubor.uz',
+  'https://admin.tezyubor.uz',
+  'http://localhost:5173',
+].filter(Boolean)
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
+    callback(new Error(`CORS: origin ${origin} not allowed`))
+  },
+  credentials: true,
+}))
 app.use(morgan('combined'))
 app.use(express.json())
 
