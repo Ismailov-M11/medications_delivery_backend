@@ -68,6 +68,7 @@ enum OrderStatus {
   courier_picked
   courier_delivery
   delivered
+  cancelled
 }
 
 enum CourierType {

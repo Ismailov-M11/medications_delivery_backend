@@ -7,12 +7,25 @@ const router = express.Router()
 const WEBHOOK_TOKEN = process.env.NOOR_WEBHOOK_TOKEN
 
 // Noor stage → our OrderStatus mapping
+// 1  = eval OK (no action)
+// 2  = searching courier
+// 3  = no courier found → triggers reorder
+// 4  = courier accepted
+// 5  = courier arrived at pickup
+// 6  = courier picked up goods
+// 7  = courier on way to customer
+// 8  = delivered
+// 22 = cancelled
+// 23 = no funds (eval)
+// 27 = no couriers (eval)
+// 28 = out of zone (eval)
 const STAGE_STATUS = {
-  4: 'courier_pickup',   // performer found
-  5: 'courier_pickup',   // arrived at pickup
-  6: 'courier_picked',   // picked up from pharmacy
-  7: 'courier_delivery', // on the way to customer
-  8: 'delivered',        // delivered
+  4: 'courier_pickup',
+  5: 'courier_pickup',
+  6: 'courier_picked',
+  7: 'courier_delivery',
+  8: 'delivered',
+  22: 'cancelled',
 }
 
 // POST /api/noor/webhook — called by Noor on status changes
