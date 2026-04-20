@@ -181,7 +181,7 @@ router.put('/:token/courier', async (req, res, next) => {
         pharmacy: order.pharmacy,
       })
       const noorOrderId = noorResponse?.order?.id ?? null
-      const noorTrackingUrl = noorResponse?.order?.tracking_url ?? null
+      const noorTrackingUrl = noorResponse?.order?.link ?? noorResponse?.order?.tracking_url ?? null
 
       const updated = await prisma.order.update({
         where: { token: req.params.token },

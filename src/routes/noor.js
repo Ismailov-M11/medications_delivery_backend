@@ -53,9 +53,15 @@ router.post('/webhook', async (req, res) => {
       updateData.noorOrderId = noorOrder.id
     }
 
-    // Save tracking URL when courier is assigned (stage 4+)
-    if (noorOrder?.tracking_url) {
-      updateData.trackingUrl = noorOrder.tracking_url
+    // Save tracking link (field is "link" in Noor's response)
+    if (noorOrder?.link) {
+      updateData.trackingUrl = noorOrder.link
+    }
+
+    // Save delivery price from pricing
+    if (noorOrder?.pricing?.total && noorOrder.pricing.total > 0) {
+      updateData.deliveryPrice = noorOrder.pricing.total
+      updateData.totalPrice = order.medicinesTotal + noorOrder.pricing.total
     }
 
     if (Object.keys(updateData).length > 0) {
