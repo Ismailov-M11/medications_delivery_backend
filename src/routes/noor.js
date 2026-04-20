@@ -6,15 +6,17 @@ const router = express.Router()
 
 const WEBHOOK_TOKEN = process.env.NOOR_WEBHOOK_TOKEN
 
-// Noor stage → our OrderStatus mapping
+// Noor stage → our OrderStatus mapping (verified from real webhooks)
 // 1  = eval OK (no action)
 // 2  = searching courier
 // 3  = no courier found → triggers reorder
 // 4  = courier accepted
-// 5  = courier arrived at pickup
-// 6  = courier picked up goods
-// 7  = courier on way to customer
-// 8  = delivered
+// 5  = courier heading to pharmacy
+// 6  = courier at pharmacy
+// 7  = courier heading to pharmacy (confirmed from real webhook)
+// 8  = courier picked up / heading to customer
+// 9  = courier at customer
+// 10 = delivered
 // 22 = cancelled
 // 23 = no funds (eval)
 // 27 = no couriers (eval)
@@ -22,9 +24,11 @@ const WEBHOOK_TOKEN = process.env.NOOR_WEBHOOK_TOKEN
 const STAGE_STATUS = {
   4: 'courier_pickup',
   5: 'courier_pickup',
-  6: 'courier_picked',
-  7: 'courier_delivery',
-  8: 'delivered',
+  6: 'courier_pickup',
+  7: 'courier_pickup',
+  8: 'courier_picked',
+  9: 'courier_delivery',
+  10: 'delivered',
   22: 'cancelled',
 }
 
