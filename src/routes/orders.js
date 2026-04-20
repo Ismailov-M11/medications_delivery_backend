@@ -10,6 +10,8 @@ const NOOR_EVAL_ERRORS = {
   28: 'Адрес доставки вне зоны обслуживания Noor',
 }
 
+const SKIP_COURIER_DISPATCH = process.env.SKIP_COURIER_DISPATCH === 'true'
+
 const router = express.Router()
 
 // GET /api/orders/:token — public
@@ -164,24 +166,31 @@ router.put('/:token/courier', async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Координаты аптеки не настроены' })
       }
 
-      // 1. Evaluate
-      const evalResult = await noorApi.evaluate(
-        order.pharmacy.lat, order.pharmacy.lng,
-        order.customerLat, order.customerLng,
-      )
-      const stage = evalResult?.evaluated_stage
-      if (stage !== 1) {
-        const message = NOOR_EVAL_ERRORS[stage] || `Noor: ошибка оценки (stage ${stage})`
-        return res.status(400).json({ success: false, message })
-      }
+      let noorOrderId = null
+      let noorTrackingUrl = null
 
-      // 2. Create order in Noor
-      const noorResponse = await noorApi.createOrder({
-        ...order,
-        pharmacy: order.pharmacy,
-      })
-      const noorOrderId = noorResponse?.order?.id ?? null
-      const noorTrackingUrl = noorResponse?.order?.link ?? noorResponse?.order?.tracking_url ?? null
+      if (SKIP_COURIER_DISPATCH) {
+        console.log('[DEV] Noor createOrder skipped (SKIP_COURIER_DISPATCH=true)')
+      } else {
+        // 1. Evaluate
+        const evalResult = await noorApi.evaluate(
+          order.pharmacy.lat, order.pharmacy.lng,
+          order.customerLat, order.customerLng,
+        )
+        const stage = evalResult?.evaluated_stage
+        if (stage !== 1) {
+          const message = NOOR_EVAL_ERRORS[stage] || `Noor: ошибка оценки (stage ${stage})`
+          return res.status(400).json({ success: false, message })
+        }
+
+        // 2. Create order in Noor
+        const noorResponse = await noorApi.createOrder({
+          ...order,
+          pharmacy: order.pharmacy,
+        })
+        noorOrderId = noorResponse?.order?.id ?? null
+        noorTrackingUrl = noorResponse?.order?.link ?? noorResponse?.order?.tracking_url ?? null
+      }
 
       const updated = await prisma.order.update({
         where: { token: req.params.token },
@@ -207,11 +216,17 @@ router.put('/:token/courier', async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Координаты аптеки не настроены' })
       }
 
-      const tmResponse = await millenniumApi.createOrder({
-        ...order,
-        pharmacy: order.pharmacy,
-      })
-      const millenniumOrderId = tmResponse?.data?.order_id ?? null
+      let millenniumOrderId = null
+
+      if (SKIP_COURIER_DISPATCH) {
+        console.log('[DEV] Millennium createOrder skipped (SKIP_COURIER_DISPATCH=true)')
+      } else {
+        const tmResponse = await millenniumApi.createOrder({
+          ...order,
+          pharmacy: order.pharmacy,
+        })
+        millenniumOrderId = tmResponse?.data?.order_id ?? null
+      }
 
       const updated = await prisma.order.update({
         where: { token: req.params.token },
