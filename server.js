@@ -65,6 +65,18 @@ async function start() {
     // Deactivate expired subscriptions
     await deactivateExpiredPharmacies()
 
+    // Auto-cancel awaiting_confirmation orders older than 3 hours
+    async function cancelStaleOrders() {
+      const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000)
+      const result = await prisma.order.updateMany({
+        where: { status: 'awaiting_confirmation', updatedAt: { lt: cutoff } },
+        data: { status: 'cancelled' },
+      })
+      if (result.count > 0) console.log(`[auto-cancel] Cancelled ${result.count} stale order(s)`)
+    }
+    await cancelStaleOrders()
+    setInterval(cancelStaleOrders, 10 * 60 * 1000)
+
     const PORT = process.env.PORT || 5000
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
   } catch (err) {

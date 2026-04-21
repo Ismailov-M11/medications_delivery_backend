@@ -6,7 +6,15 @@ const { auth } = require('../middleware/auth')
 const { checkSubscription } = require('../middleware/checkSubscription')
 
 const router = express.Router()
-const generateToken = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 12)
+
+async function generateOrderToken() {
+  while (true) {
+    const digits = Math.floor(1000000 + Math.random() * 9000000).toString()
+    const token = `ORD${digits}`
+    const existing = await prisma.order.findUnique({ where: { token } })
+    if (!existing) return token
+  }
+}
 
 router.use(auth)
 
@@ -120,21 +128,85 @@ router.get('/orders', async (req, res, next) => {
 // POST /api/pharmacy/orders
 router.post('/orders', async (req, res, next) => {
   try {
-    const { pharmacyComment, medicinesTotal } = req.body
-    if (!medicinesTotal || isNaN(Number(medicinesTotal))) {
-      return res.status(400).json({ success: false, message: 'medicinesTotal is required' })
-    }
-    const token = generateToken()
+    const { pharmacyComment } = req.body
+    const token = await generateOrderToken()
     const order = await prisma.order.create({
       data: {
         token,
         pharmacyId: req.user.id,
         pharmacyComment: pharmacyComment || null,
-        medicinesTotal: Number(medicinesTotal),
+        medicinesTotal: 0,
       },
     })
-    const orderUrl = `${process.env.CLIENT_URL}/order/${token}`
+    const baseUrl = process.env.CLIENT_URL || 'https://tezyubor.uz'
+    const orderUrl = `${baseUrl}/order/${token}`
     res.status(201).json({ success: true, data: { order, orderUrl } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/pharmacy/orders/:token/confirm — merchant confirms order, calls courier API
+router.put('/orders/:token/confirm', async (req, res, next) => {
+  try {
+    const noorApi = require('../utils/noorApi')
+    const millenniumApi = require('../utils/millenniumApi')
+    const SKIP = process.env.SKIP_COURIER_DISPATCH === 'true'
+
+    const order = await prisma.order.findUnique({
+      where: { token: req.params.token },
+      include: { pharmacy: { select: { lat: true, lng: true, address: true, phone: true, name: true } } },
+    })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+    if (order.pharmacyId !== req.user.id) return res.status(403).json({ success: false, message: 'Forbidden' })
+    if (order.status !== 'awaiting_confirmation') {
+      return res.status(400).json({ success: false, message: 'Order is not awaiting confirmation' })
+    }
+
+    const courier = order.selectedCourier
+
+    let noorOrderId = order.noorOrderId
+    let millenniumOrderId = order.millenniumOrderId
+    let trackingUrl = order.trackingUrl
+
+    if (!SKIP) {
+      if (courier === 'noor') {
+        const evalResult = await noorApi.evaluate(order.pharmacy.lat, order.pharmacy.lng, order.customerLat, order.customerLng)
+        const stage = evalResult?.evaluated_stage
+        if (stage !== 1) {
+          const NOOR_ERRORS = { 23: 'Недостаточно средств на балансе Noor', 27: 'Нет свободных курьеров', 28: 'Адрес вне зоны Noor' }
+          return res.status(400).json({ success: false, message: NOOR_ERRORS[stage] || `Noor: ошибка (stage ${stage})` })
+        }
+        const noorRes = await noorApi.createOrder({ ...order, pharmacy: order.pharmacy })
+        noorOrderId = noorRes?.order?.id ?? null
+        trackingUrl = noorRes?.order?.link ?? noorRes?.order?.tracking_url ?? null
+      } else if (courier === 'millennium') {
+        const tmRes = await millenniumApi.createOrder({ ...order, pharmacy: order.pharmacy })
+        millenniumOrderId = tmRes?.data?.order_id ?? null
+      }
+    }
+
+    const updated = await prisma.order.update({
+      where: { token: req.params.token },
+      data: { status: 'confirmed', noorOrderId, millenniumOrderId, trackingUrl },
+    })
+    res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/pharmacy/orders/:token/cancel — merchant cancels order
+router.put('/orders/:token/cancel', async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({ where: { token: req.params.token } })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+    if (order.pharmacyId !== req.user.id) return res.status(403).json({ success: false, message: 'Forbidden' })
+    const updated = await prisma.order.update({
+      where: { token: req.params.token },
+      data: { status: 'cancelled' },
+    })
+    res.json({ success: true, data: updated })
   } catch (err) {
     next(err)
   }
