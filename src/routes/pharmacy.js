@@ -128,14 +128,14 @@ router.get('/orders', async (req, res, next) => {
 // POST /api/pharmacy/orders
 router.post('/orders', async (req, res, next) => {
   try {
-    const { pharmacyComment } = req.body
+    const { pharmacyComment, medicinesTotal } = req.body
     const token = await generateOrderToken()
     const order = await prisma.order.create({
       data: {
         token,
         pharmacyId: req.user.id,
         pharmacyComment: pharmacyComment || null,
-        medicinesTotal: 0,
+        medicinesTotal: medicinesTotal != null ? Number(medicinesTotal) : 0,
       },
     })
     const baseUrl = process.env.CLIENT_URL || 'https://tezyubor.uz'
