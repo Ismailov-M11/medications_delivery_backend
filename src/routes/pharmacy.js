@@ -81,8 +81,9 @@ router.put('/location', async (req, res, next) => {
         lat: Number(lat),
         lng: Number(lng),
         address: address || null,
+        requiresLocation: false,
       },
-      select: { id: true, lat: true, lng: true, address: true }
+      select: { id: true, lat: true, lng: true, address: true, requiresLocation: true }
     })
     res.json({ success: true, data: updated })
   } catch (err) {

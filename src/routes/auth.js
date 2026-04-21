@@ -42,6 +42,7 @@ router.post('/pharmacy/login', async (req, res, next) => {
           name: pharmacy.name,
           lat: pharmacy.lat,
           lng: pharmacy.lng,
+          requiresLocation: pharmacy.requiresLocation,
         }
       }
     })
@@ -86,22 +87,22 @@ router.post('/admin/login', async (req, res, next) => {
 router.post('/signup', async (req, res, next) => {
   try {
     const { name, ownerName, phone, email, password } = req.body
-    if (!name || !phone || !password) {
-      return res.status(400).json({ success: false, message: 'Name, phone and password are required' })
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Name, email and password are required' })
     }
     if (password.length < 6) {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' })
     }
 
-    // Use phone as login (strip non-digits)
-    const login = phone.replace(/\D/g, '')
-    if (login.length < 7) {
-      return res.status(400).json({ success: false, message: 'Invalid phone number' })
+    // Use email as login
+    const login = email.trim().toLowerCase()
+    if (!login.includes('@')) {
+      return res.status(400).json({ success: false, message: 'Invalid email address' })
     }
 
     const exists = await prisma.pharmacy.findUnique({ where: { login } })
     if (exists) {
-      return res.status(409).json({ success: false, message: 'An account with this phone number already exists' })
+      return res.status(409).json({ success: false, message: 'An account with this email already exists' })
     }
 
     const hashed = await bcrypt.hash(password, 10)
@@ -112,11 +113,12 @@ router.post('/signup', async (req, res, next) => {
       data: {
         name,
         ownerName: ownerName || null,
-        email: email || null,
-        phone,
+        email: login,
+        phone: phone || '',
         login,
         password: hashed,
         isActive: true,
+        requiresLocation: true,
         subscriptionExpiry,
       }
     })

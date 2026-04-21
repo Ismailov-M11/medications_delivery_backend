@@ -27,6 +27,7 @@ model Pharmacy {
   login              String    @unique
   password           String
   isActive           Boolean   @default(true)
+  requiresLocation   Boolean   @default(false)
   subscriptionExpiry DateTime?
   createdAt          DateTime  @default(now())
   orders             Order[]
