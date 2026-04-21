@@ -14,11 +14,21 @@ router.use(checkSubscription)
 // GET /api/pharmacy/orders
 router.get('/orders', async (req, res, next) => {
   try {
-    const orders = await prisma.order.findMany({
-      where: { pharmacyId: req.user.id },
-      orderBy: { createdAt: 'desc' },
-    })
-    res.json({ success: true, data: { orders } })
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const pageSize = Math.min(500, Math.max(1, parseInt(req.query.pageSize) || 20))
+    const where = { pharmacyId: req.user.id }
+
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.order.count({ where }),
+    ])
+
+    res.json({ success: true, data: { orders, total, page, pageSize } })
   } catch (err) {
     next(err)
   }
