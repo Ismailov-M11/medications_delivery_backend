@@ -38,10 +38,19 @@ router.get('/orders', async (req, res, next) => {
 // GET /api/admin/pharmacies
 router.get('/pharmacies', async (req, res, next) => {
   try {
+    // Auto-deactivate expired subscriptions
+    await prisma.pharmacy.updateMany({
+      where: {
+        isActive: true,
+        subscriptionExpiry: { lt: new Date() }
+      },
+      data: { isActive: false }
+    })
+
     const pharmacies = await prisma.pharmacy.findMany({
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, name: true, address: true, phone: true,
+        id: true, name: true, ownerName: true, address: true, phone: true,
         lat: true, lng: true, login: true,
         isActive: true, subscriptionExpiry: true, createdAt: true,
         _count: { select: { orders: true } }
@@ -56,8 +65,8 @@ router.get('/pharmacies', async (req, res, next) => {
 // POST /api/admin/pharmacies
 router.post('/pharmacies', async (req, res, next) => {
   try {
-    const { name, address, phone, login, password, lat, lng, subscriptionExpiry } = req.body
-    if (!name || !address || !phone || !login || !password) {
+    const { name, ownerName, address, phone, login, password, lat, lng, subscriptionExpiry } = req.body
+    if (!name || !phone || !login || !password) {
       return res.status(400).json({ success: false, message: 'All fields required' })
     }
     const exists = await prisma.pharmacy.findUnique({ where: { login } })
@@ -67,7 +76,11 @@ router.post('/pharmacies', async (req, res, next) => {
     const hashed = await bcrypt.hash(password, 10)
     const pharmacy = await prisma.pharmacy.create({
       data: {
-        name, address, phone, login,
+        name,
+        ownerName: ownerName || null,
+        address: address || null,
+        phone,
+        login,
         password: hashed,
         lat: lat ? Number(lat) : null,
         lng: lng ? Number(lng) : null,
@@ -84,10 +97,11 @@ router.post('/pharmacies', async (req, res, next) => {
 // PUT /api/admin/pharmacies/:id
 router.put('/pharmacies/:id', async (req, res, next) => {
   try {
-    const { name, address, phone, isActive, subscriptionExpiry, login, password, lat, lng } = req.body
+    const { name, ownerName, address, phone, isActive, subscriptionExpiry, login, password, lat, lng } = req.body
     const data = {}
     if (name !== undefined) data.name = name
-    if (address !== undefined) data.address = address
+    if (ownerName !== undefined) data.ownerName = ownerName || null
+    if (address !== undefined) data.address = address || null
     if (phone !== undefined) data.phone = phone
     if (isActive !== undefined) data.isActive = Boolean(isActive)
     if (subscriptionExpiry !== undefined) data.subscriptionExpiry = subscriptionExpiry ? new Date(subscriptionExpiry) : null
@@ -113,7 +127,7 @@ router.put('/pharmacies/:id', async (req, res, next) => {
       where: { id: req.params.id },
       data,
       select: {
-        id: true, name: true, address: true, phone: true, login: true,
+        id: true, name: true, ownerName: true, address: true, phone: true, login: true,
         lat: true, lng: true, isActive: true, subscriptionExpiry: true, createdAt: true
       }
     })

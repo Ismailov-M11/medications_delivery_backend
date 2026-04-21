@@ -36,7 +36,13 @@ router.post('/pharmacy/login', async (req, res, next) => {
       success: true,
       data: {
         token,
-        user: { id: pharmacy.id, role: 'pharmacy', name: pharmacy.name }
+        user: {
+          id: pharmacy.id,
+          role: 'pharmacy',
+          name: pharmacy.name,
+          lat: pharmacy.lat,
+          lng: pharmacy.lng,
+        }
       }
     })
   } catch (err) {
@@ -69,6 +75,57 @@ router.post('/admin/login', async (req, res, next) => {
       data: {
         token,
         user: { id: admin.id, role: 'admin' }
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/signup — creates pharmacy account with 7-day trial
+router.post('/signup', async (req, res, next) => {
+  try {
+    const { name, ownerName, phone, email, password } = req.body
+    if (!name || !phone || !password) {
+      return res.status(400).json({ success: false, message: 'Name, phone and password are required' })
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' })
+    }
+
+    // Use phone as login (strip non-digits)
+    const login = phone.replace(/\D/g, '')
+    if (login.length < 7) {
+      return res.status(400).json({ success: false, message: 'Invalid phone number' })
+    }
+
+    const exists = await prisma.pharmacy.findUnique({ where: { login } })
+    if (exists) {
+      return res.status(409).json({ success: false, message: 'An account with this phone number already exists' })
+    }
+
+    const hashed = await bcrypt.hash(password, 10)
+    const subscriptionExpiry = new Date()
+    subscriptionExpiry.setDate(subscriptionExpiry.getDate() + 7)
+
+    const pharmacy = await prisma.pharmacy.create({
+      data: {
+        name,
+        ownerName: ownerName || null,
+        email: email || null,
+        phone,
+        login,
+        password: hashed,
+        isActive: true,
+        subscriptionExpiry,
+      }
+    })
+
+    res.status(201).json({
+      success: true,
+      data: {
+        login,
+        message: 'Account created successfully. You have a 7-day free trial.'
       }
     })
   } catch (err) {

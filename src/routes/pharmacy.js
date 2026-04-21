@@ -1,4 +1,5 @@
 const express = require('express')
+const bcrypt = require('bcryptjs')
 const { customAlphabet } = require('nanoid')
 const prisma = require('../config/db')
 const { auth } = require('../middleware/auth')
@@ -7,8 +8,89 @@ const { checkSubscription } = require('../middleware/checkSubscription')
 const router = express.Router()
 const generateToken = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 12)
 
-// All pharmacy routes require auth + active subscription
 router.use(auth)
+
+// GET /api/pharmacy/me — profile (no subscription check, needed for location setup)
+router.get('/me', async (req, res, next) => {
+  try {
+    const pharmacy = await prisma.pharmacy.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true, name: true, ownerName: true, address: true, phone: true,
+        email: true, lat: true, lng: true, login: true,
+        isActive: true, subscriptionExpiry: true, createdAt: true,
+      }
+    })
+    if (!pharmacy) return res.status(404).json({ success: false, message: 'Not found' })
+    res.json({ success: true, data: pharmacy })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/pharmacy/me — update own profile
+router.put('/me', async (req, res, next) => {
+  try {
+    const { name, ownerName, phone, address, currentPassword, newPassword } = req.body
+    const data = {}
+    if (name !== undefined && name.trim()) data.name = name.trim()
+    if (ownerName !== undefined) data.ownerName = ownerName || null
+    if (phone !== undefined && phone.trim()) data.phone = phone.trim()
+    if (address !== undefined) data.address = address || null
+
+    if (newPassword && newPassword.trim()) {
+      if (!currentPassword) {
+        return res.status(400).json({ success: false, message: 'Current password is required to set a new password' })
+      }
+      const pharmacy = await prisma.pharmacy.findUnique({ where: { id: req.user.id } })
+      const valid = await bcrypt.compare(currentPassword, pharmacy.password)
+      if (!valid) {
+        return res.status(400).json({ success: false, message: 'Current password is incorrect' })
+      }
+      if (newPassword.trim().length < 6) {
+        return res.status(400).json({ success: false, message: 'New password must be at least 6 characters' })
+      }
+      data.password = await bcrypt.hash(newPassword.trim(), 10)
+    }
+
+    const updated = await prisma.pharmacy.update({
+      where: { id: req.user.id },
+      data,
+      select: {
+        id: true, name: true, ownerName: true, address: true, phone: true,
+        email: true, lat: true, lng: true, login: true,
+        isActive: true, subscriptionExpiry: true,
+      }
+    })
+    res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/pharmacy/location — set own location (no subscription check)
+router.put('/location', async (req, res, next) => {
+  try {
+    const { lat, lng, address } = req.body
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, message: 'lat and lng are required' })
+    }
+    const updated = await prisma.pharmacy.update({
+      where: { id: req.user.id },
+      data: {
+        lat: Number(lat),
+        lng: Number(lng),
+        address: address || null,
+      },
+      select: { id: true, lat: true, lng: true, address: true }
+    })
+    res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// All routes below require active subscription
 router.use(checkSubscription)
 
 // GET /api/pharmacy/orders

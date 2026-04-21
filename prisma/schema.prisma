@@ -18,7 +18,9 @@ model Admin {
 model Pharmacy {
   id                 String    @id @default(cuid())
   name               String
-  address            String
+  ownerName          String?
+  email              String?
+  address            String?
   phone              String
   lat                Float?
   lng                Float?
