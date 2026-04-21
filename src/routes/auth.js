@@ -43,6 +43,7 @@ router.post('/pharmacy/login', async (req, res, next) => {
           lat: pharmacy.lat,
           lng: pharmacy.lng,
           requiresLocation: pharmacy.requiresLocation,
+          subscriptionExpiry: pharmacy.subscriptionExpiry,
         }
       }
     })
