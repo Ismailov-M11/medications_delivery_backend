@@ -92,8 +92,8 @@ async function calcOrderCost(pharmacyLat, pharmacyLng, customerLat, customerLng)
  */
 async function createOrder(order) {
   const details = [
-    order.intercom  ? `Домофон: ${order.intercom}` : '',
     order.entrance  ? `Подъезд: ${order.entrance}` : '',
+    order.intercom  ? `Домофон: ${order.intercom}` : '',
     order.floor     ? `Этаж: ${order.floor}`       : '',
     order.apartment ? `Кв: ${order.apartment}`     : '',
   ].filter(Boolean).join('. ')
@@ -102,7 +102,7 @@ async function createOrder(order) {
     `Заказ: ${order.token}`,
     details,
     order.customerComment ? `Комментарий: ${order.customerComment}` : '',
-    `Номер клиента: ${order.customerPhone}`,
+    `Номер клиента: ${(order.customerPhone || '').replace(/\s+/g, '')}`,
   ].filter(Boolean).join('\n')
 
   const sourceAddress = order.pharmacy.name || ''
