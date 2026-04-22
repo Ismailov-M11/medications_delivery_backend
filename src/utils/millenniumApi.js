@@ -1,13 +1,14 @@
+const crypto = require('crypto')
 const https = require('https')
 
 const TM_HOST    = process.env.MILLENNIUM_API_HOST   || 'https://millennium.tm.taxi:8089'
 const SECRET_KEY = process.env.MILLENNIUM_SECRET_KEY || 'DEB3C898-50D7-489C-98E0-B7CA7C203E3D'
 const USER_ID    = process.env.MILLENNIUM_USER_ID    || '242'
-const CLIENT_ID  = Number(process.env.MILLENNIUM_CLIENT_ID        || '164629')
+const CLIENT_ID  = Number(process.env.MILLENNIUM_CLIENT_ID        || '164274')
 const CREW_GROUP_ID = Number(process.env.MILLENNIUM_CREW_GROUP_ID || '25')
 
-function buildSignature() {
-  return SECRET_KEY
+function buildSignature(bodyStr) {
+  return crypto.createHash('md5').update(bodyStr + SECRET_KEY).digest('hex')
 }
 
 function sourceTime() {
@@ -33,7 +34,7 @@ function tmPost(path, body) {
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
-        'Signature': buildSignature(body),
+        'Signature': buildSignature(payload),
         'X-User-Id': USER_ID,
       },
     }
@@ -105,6 +106,7 @@ async function createOrder(order) {
     source_time: sourceTime(),
     comment,
     check_duplicate: false,
+    attribute_values: [{ id: 232, bool_value: true }],
   }
   return tmPost('/common_api/1.0/create_order2', body)
 }
