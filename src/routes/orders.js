@@ -93,17 +93,22 @@ router.post('/:token/noor/evaluate', async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Координаты аптеки не настроены' })
     }
 
+    console.log(`[Noor] evaluate coords: pharmacy(${order.pharmacy.lat},${order.pharmacy.lng}) -> customer(${order.customerLat},${order.customerLng})`)
+
     const result = await noorApi.evaluate(
       order.pharmacy.lat, order.pharmacy.lng,
       order.customerLat, order.customerLng,
     )
 
+    console.log('[Noor] evaluate response:', JSON.stringify(result))
+
     const stage = result?.evaluated_stage
     const available = stage === 1
     const errorMessage = available ? null : (NOOR_EVAL_ERRORS[stage] || `Ошибка оценки (stage ${stage})`)
 
-    // Extract delivery price from Noor evaluate response
     const price = result?.total_delivery_price ?? null
+
+    console.log(`[Noor] result: available=${available}, stage=${stage}, price=${price}, error=${errorMessage}`)
 
     res.json({ success: true, data: { available, stage, price, error: errorMessage } })
   } catch (err) {
@@ -126,14 +131,18 @@ router.post('/:token/millennium/evaluate', async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Координаты аптеки не настроены' })
     }
 
+    console.log(`[Millennium] evaluate coords: pharmacy(${order.pharmacy.lat},${order.pharmacy.lng}) -> customer(${order.customerLat},${order.customerLng})`)
+
     const price = await millenniumApi.calcOrderCost(
       order.pharmacy.lat, order.pharmacy.lng,
       order.customerLat, order.customerLng,
     )
 
+    console.log(`[Millennium] result: available=true, price=${price}`)
+
     res.json({ success: true, data: { available: true, price } })
   } catch (err) {
-    // calcOrderCost throws on API error — treat as unavailable
+    console.log('[Millennium] error:', err.message)
     res.json({ success: true, data: { available: false, price: null, error: err.message } })
   }
 })
