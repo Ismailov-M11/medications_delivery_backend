@@ -111,8 +111,7 @@ async function createOrder(order) {
   const body = {
     crew_group_id: CREW_GROUP_ID,
     client_id: CLIENT_ID,
-    phone: order.customerPhone,
-    phone_to_dial: normalizePhone(order.pharmacy.phone),
+    phone: normalizePhone(order.pharmacy.phone),
     addresses: [
       { address: sourceAddress,         lat: order.pharmacy.lat, lon: order.pharmacy.lng },
       { address: order.customerAddress, lat: order.customerLat,  lon: order.customerLng  },
