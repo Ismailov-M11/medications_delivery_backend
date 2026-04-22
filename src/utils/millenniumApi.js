@@ -2,9 +2,9 @@ const crypto = require('crypto')
 const https = require('https')
 
 const TM_HOST    = process.env.MILLENNIUM_API_HOST   || 'https://millennium.tm.taxi:8089'
-const SECRET_KEY = process.env.MILLENNIUM_SECRET_KEY || '61CB859C-F7A5-4B68-B83E-DE235517B99D'
-const USER_ID    = process.env.MILLENNIUM_USER_ID    || '189'
-const CLIENT_ID  = Number(process.env.MILLENNIUM_CLIENT_ID        || '145964')
+const SECRET_KEY = process.env.MILLENNIUM_SECRET_KEY || 'DEB3C898-50D7-489C-98E0-B7CA7C203E3D'
+const USER_ID    = process.env.MILLENNIUM_USER_ID    || '242'
+const CLIENT_ID  = Number(process.env.MILLENNIUM_CLIENT_ID        || '164629')
 const CREW_GROUP_ID = Number(process.env.MILLENNIUM_CREW_GROUP_ID || '25')
 
 function buildSignature(body) {
