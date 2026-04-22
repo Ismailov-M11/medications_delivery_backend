@@ -1,4 +1,3 @@
-const crypto = require('crypto')
 const https = require('https')
 
 const TM_HOST    = process.env.MILLENNIUM_API_HOST   || 'https://millennium.tm.taxi:8089'
@@ -7,8 +6,8 @@ const USER_ID    = process.env.MILLENNIUM_USER_ID    || '242'
 const CLIENT_ID  = Number(process.env.MILLENNIUM_CLIENT_ID        || '164629')
 const CREW_GROUP_ID = Number(process.env.MILLENNIUM_CREW_GROUP_ID || '25')
 
-function buildSignature(body) {
-  return crypto.createHash('md5').update(JSON.stringify(body) + SECRET_KEY).digest('hex')
+function buildSignature() {
+  return SECRET_KEY
 }
 
 function sourceTime() {
