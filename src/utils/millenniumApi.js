@@ -7,6 +7,11 @@ const USER_ID    = process.env.MILLENNIUM_USER_ID    || '242'
 const CLIENT_ID  = Number(process.env.MILLENNIUM_CLIENT_ID        || '164274')
 const CREW_GROUP_ID = Number(process.env.MILLENNIUM_CREW_GROUP_ID || '25')
 
+function normalizePhone(phone) {
+  if (!phone) return ''
+  return phone.startsWith('+998') ? phone : `+998${phone}`
+}
+
 function buildSignature(bodyStr) {
   return crypto.createHash('md5').update(bodyStr + SECRET_KEY).digest('hex')
 }
@@ -86,22 +91,31 @@ async function calcOrderCost(pharmacyLat, pharmacyLng, customerLat, customerLng)
  * Returns full response; data.order_id = Millennium order ID.
  */
 async function createOrder(order) {
-  const comment = [
-    order.customerComment,
-    order.floor     ? `Этаж: ${order.floor}`      : '',
+  const details = [
     order.intercom  ? `Домофон: ${order.intercom}` : '',
     order.entrance  ? `Подъезд: ${order.entrance}` : '',
+    order.floor     ? `Этаж: ${order.floor}`       : '',
     order.apartment ? `Кв: ${order.apartment}`     : '',
-    `Заказ: ${order.token}`,
   ].filter(Boolean).join('. ')
+
+  const comment = [
+    `Заказ: ${order.token}`,
+    details,
+    order.customerComment ? `Комментарий: ${order.customerComment}` : '',
+    `Номер клиента: ${order.customerPhone}`,
+  ].filter(Boolean).join('\n')
+
+  const sourceAddress = [order.pharmacy.name, order.pharmacy.address]
+    .filter(Boolean).join(', ')
 
   const body = {
     crew_group_id: CREW_GROUP_ID,
     client_id: CLIENT_ID,
     phone: order.customerPhone,
+    phone_to_dial: normalizePhone(order.pharmacy.phone),
     addresses: [
-      { address: order.pharmacy.address, lat: order.pharmacy.lat, lon: order.pharmacy.lng },
-      { address: order.customerAddress,  lat: order.customerLat,  lon: order.customerLng  },
+      { address: sourceAddress,         lat: order.pharmacy.lat, lon: order.pharmacy.lng },
+      { address: order.customerAddress, lat: order.customerLat,  lon: order.customerLng  },
     ],
     source_time: sourceTime(),
     comment,
