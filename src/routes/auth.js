@@ -16,12 +16,10 @@ router.post('/pharmacy/login', async (req, res, next) => {
     if (!pharmacy) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' })
     }
-    if (!pharmacy.isActive) {
-      return res.status(403).json({ success: false, message: 'Account inactive or subscription expired' })
-    }
-    if (pharmacy.subscriptionExpiry && pharmacy.subscriptionExpiry < new Date()) {
-      await prisma.pharmacy.update({ where: { id: pharmacy.id }, data: { isActive: false } })
-      return res.status(403).json({ success: false, message: 'Subscription expired' })
+    const subscriptionExpired = pharmacy.subscriptionExpiry && pharmacy.subscriptionExpiry < new Date()
+    // Block only if manually deactivated by admin (not because of subscription expiry)
+    if (!pharmacy.isActive && !subscriptionExpired) {
+      return res.status(403).json({ success: false, message: 'Account inactive' })
     }
     const valid = await bcrypt.compare(password, pharmacy.password)
     if (!valid) {
