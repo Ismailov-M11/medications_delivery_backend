@@ -105,8 +105,7 @@ async function createOrder(order) {
     `Номер клиента: ${order.customerPhone}`,
   ].filter(Boolean).join('\n')
 
-  const sourceAddress = [order.pharmacy.name, order.pharmacy.address]
-    .filter(Boolean).join(', ')
+  const sourceAddress = order.pharmacy.name || ''
 
   const body = {
     crew_group_id: CREW_GROUP_ID,
