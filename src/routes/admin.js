@@ -154,27 +154,6 @@ router.delete('/pharmacies/:id', async (req, res, next) => {
   }
 })
 
-// POST /api/admin/fix-phone-spaces — one-time migration, remove after use
-router.post('/fix-phone-spaces', async (req, res, next) => {
-  try {
-    const orders = await prisma.order.findMany({
-      where: { customerPhone: { contains: ' ' } },
-      select: { id: true, customerPhone: true },
-    })
-    let fixed = 0
-    for (const o of orders) {
-      await prisma.order.update({
-        where: { id: o.id },
-        data: { customerPhone: o.customerPhone.replace(/\s+/g, '') },
-      })
-      fixed++
-    }
-    res.json({ success: true, fixed, total: orders.length })
-  } catch (err) {
-    next(err)
-  }
-})
-
 // GET /api/admin/clients
 router.get('/clients', async (req, res, next) => {
   try {
