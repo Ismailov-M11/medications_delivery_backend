@@ -16,22 +16,35 @@ model Admin {
 }
 
 model Pharmacy {
-  id                 String    @id @default(cuid())
-  name               String
-  ownerName          String?
-  email              String?
-  address            String?
-  phone              String
-  lat                Float?
-  lng                Float?
-  login              String    @unique
-  password           String
-  isActive           Boolean   @default(true)
-  requiresLocation   Boolean   @default(false)
-  subscriptionExpiry DateTime?
-  allowedCouriers    String    @default("yandex,noor,millennium")
-  createdAt          DateTime  @default(now())
-  orders             Order[]
+  id                   String                @id @default(cuid())
+  name                 String
+  ownerName            String?
+  email                String?
+  address              String?
+  phone                String
+  lat                  Float?
+  lng                  Float?
+  login                String                @unique
+  password             String
+  isActive             Boolean               @default(true)
+  requiresLocation     Boolean               @default(false)
+  subscriptionExpiry   DateTime?
+  allowedCouriers      String                @default("yandex,noor,millennium")
+  createdAt            DateTime              @default(now())
+  orders               Order[]
+  subscriptionPayments SubscriptionPayment[]
+}
+
+model SubscriptionPayment {
+  id         String    @id @default(cuid())
+  pharmacyId String
+  pharmacy   Pharmacy  @relation(fields: [pharmacyId], references: [id])
+  uuid       String    @unique
+  invoiceId  String?
+  amount     Int
+  status     String    @default("pending")
+  createdAt  DateTime  @default(now())
+  paidAt     DateTime?
 }
 
 model Order {

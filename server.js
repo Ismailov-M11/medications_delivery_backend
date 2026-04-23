@@ -13,6 +13,7 @@ const ordersRoutes = require('./src/routes/orders')
 const adminRoutes = require('./src/routes/admin')
 const noorRoutes = require('./src/routes/noor')
 const millenniumRoutes = require('./src/routes/millennium')
+const webhooksRoutes = require('./src/routes/webhooks')
 
 const app = express()
 
@@ -44,6 +45,7 @@ app.use('/api/orders', ordersRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/noor', noorRoutes)
 app.use('/api/millennium', millenniumRoutes)
+app.use('/api/webhooks', webhooksRoutes)
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }))
 

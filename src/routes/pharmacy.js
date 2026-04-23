@@ -1,4 +1,5 @@
 const express = require('express')
+const crypto = require('crypto')
 const bcrypt = require('bcryptjs')
 const { customAlphabet } = require('nanoid')
 const prisma = require('../config/db')
@@ -94,6 +95,31 @@ router.put('/location', async (req, res, next) => {
       select: { id: true, lat: true, lng: true, address: true, requiresLocation: true }
     })
     res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/pharmacy/subscription/pay — create Multicard invoice (no subscription check needed)
+router.post('/subscription/pay', async (req, res, next) => {
+  try {
+    const { createInvoice } = require('../utils/multicardApi')
+    const uuid = crypto.randomUUID()
+    const amount = 10000000 // 100,000 sum in tiyins
+
+    const result = await createInvoice({ uuid, amount })
+
+    await prisma.subscriptionPayment.create({
+      data: {
+        pharmacyId: req.user.id,
+        uuid,
+        invoiceId: result.invoice_id || result.id || null,
+        amount,
+        status: 'pending',
+      }
+    })
+
+    res.json({ success: true, data: { checkoutUrl: result.checkout_url || result.checkoutUrl } })
   } catch (err) {
     next(err)
   }
