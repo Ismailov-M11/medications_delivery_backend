@@ -26,7 +26,7 @@ router.get('/me', async (req, res, next) => {
       select: {
         id: true, name: true, ownerName: true, address: true, phone: true,
         email: true, lat: true, lng: true, login: true,
-        isActive: true, subscriptionExpiry: true, createdAt: true,
+        isActive: true, subscriptionExpiry: true, allowedCouriers: true, createdAt: true,
       }
     })
     if (!pharmacy) return res.status(404).json({ success: false, message: 'Not found' })
@@ -207,6 +207,95 @@ router.put('/orders/:token/cancel', async (req, res, next) => {
       data: { status: 'cancelled' },
     })
     res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/pharmacy/analytics
+router.get('/analytics', async (req, res, next) => {
+  try {
+    const pharmacyId = req.user.id
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const [totalOrders, aggregates, ordersByStatus, ordersByCourier, recentOrders] = await Promise.all([
+      prisma.order.count({ where: { pharmacyId } }),
+      prisma.order.aggregate({
+        where: { pharmacyId },
+        _sum: { medicinesTotal: true, deliveryPrice: true, totalPrice: true }
+      }),
+      prisma.order.groupBy({ by: ['status'], where: { pharmacyId }, _count: { id: true } }),
+      prisma.order.groupBy({
+        by: ['selectedCourier'],
+        where: { pharmacyId, selectedCourier: { not: null } },
+        _count: { id: true }
+      }),
+      prisma.order.findMany({
+        where: { pharmacyId, createdAt: { gte: thirtyDaysAgo } },
+        select: { createdAt: true },
+        orderBy: { createdAt: 'asc' }
+      })
+    ])
+
+    const ordersByDay = {}
+    recentOrders.forEach(o => {
+      const day = o.createdAt.toISOString().split('T')[0]
+      ordersByDay[day] = (ordersByDay[day] || 0) + 1
+    })
+
+    res.json({
+      success: true,
+      data: {
+        totalOrders,
+        totalMedicinesAmount: aggregates._sum.medicinesTotal || 0,
+        totalDeliveryAmount: aggregates._sum.deliveryPrice || 0,
+        totalRevenue: aggregates._sum.totalPrice || 0,
+        ordersByStatus: ordersByStatus.map(s => ({ status: s.status, count: s._count.id })),
+        ordersByCourier: ordersByCourier.map(c => ({ courier: c.selectedCourier, count: c._count.id })),
+        ordersByDay: Object.entries(ordersByDay).map(([date, count]) => ({ date, count }))
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/pharmacy/clients
+router.get('/clients', async (req, res, next) => {
+  try {
+    const pharmacyId = req.user.id
+    const orders = await prisma.order.findMany({
+      where: { pharmacyId, customerPhone: { not: null } },
+      select: {
+        customerName: true,
+        customerPhone: true,
+        customerAddress: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    const clientsMap = new Map()
+    for (const order of orders) {
+      const phone = order.customerPhone
+      if (!phone) continue
+      if (!clientsMap.has(phone)) {
+        clientsMap.set(phone, {
+          phone,
+          name: order.customerName,
+          address: order.customerAddress,
+          ordersCount: 0,
+          lastOrderAt: order.createdAt,
+        })
+      }
+      clientsMap.get(phone).ordersCount++
+    }
+
+    const clients = Array.from(clientsMap.values())
+      .sort((a, b) => b.ordersCount - a.ordersCount)
+
+    res.json({ success: true, data: { clients, total: clients.length } })
   } catch (err) {
     next(err)
   }

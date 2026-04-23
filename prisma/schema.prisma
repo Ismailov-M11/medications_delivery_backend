@@ -29,6 +29,7 @@ model Pharmacy {
   isActive           Boolean   @default(true)
   requiresLocation   Boolean   @default(false)
   subscriptionExpiry DateTime?
+  allowedCouriers    String    @default("yandex,noor,millennium")
   createdAt          DateTime  @default(now())
   orders             Order[]
 }

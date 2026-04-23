@@ -52,7 +52,7 @@ router.get('/pharmacies', async (req, res, next) => {
       select: {
         id: true, name: true, ownerName: true, address: true, phone: true,
         lat: true, lng: true, login: true,
-        isActive: true, subscriptionExpiry: true, createdAt: true,
+        isActive: true, subscriptionExpiry: true, allowedCouriers: true, createdAt: true,
         _count: { select: { orders: true } }
       }
     })
@@ -65,7 +65,7 @@ router.get('/pharmacies', async (req, res, next) => {
 // POST /api/admin/pharmacies
 router.post('/pharmacies', async (req, res, next) => {
   try {
-    const { name, ownerName, address, phone, login, password, lat, lng, subscriptionExpiry } = req.body
+    const { name, ownerName, address, phone, login, password, lat, lng, subscriptionExpiry, allowedCouriers } = req.body
     if (!name || !phone || !login || !password) {
       return res.status(400).json({ success: false, message: 'All fields required' })
     }
@@ -85,6 +85,7 @@ router.post('/pharmacies', async (req, res, next) => {
         lat: lat ? Number(lat) : null,
         lng: lng ? Number(lng) : null,
         subscriptionExpiry: subscriptionExpiry ? new Date(subscriptionExpiry) : null,
+        allowedCouriers: Array.isArray(allowedCouriers) ? allowedCouriers.join(',') : (allowedCouriers || 'yandex,noor,millennium'),
       }
     })
     const { password: _, ...safePharmacy } = pharmacy
@@ -97,7 +98,7 @@ router.post('/pharmacies', async (req, res, next) => {
 // PUT /api/admin/pharmacies/:id
 router.put('/pharmacies/:id', async (req, res, next) => {
   try {
-    const { name, ownerName, address, phone, isActive, subscriptionExpiry, login, password, lat, lng } = req.body
+    const { name, ownerName, address, phone, isActive, subscriptionExpiry, login, password, lat, lng, allowedCouriers } = req.body
     const data = {}
     if (name !== undefined) data.name = name
     if (ownerName !== undefined) data.ownerName = ownerName || null
@@ -107,6 +108,9 @@ router.put('/pharmacies/:id', async (req, res, next) => {
     if (subscriptionExpiry !== undefined) data.subscriptionExpiry = subscriptionExpiry ? new Date(subscriptionExpiry) : null
     if (lat !== undefined) data.lat = lat ? Number(lat) : null
     if (lng !== undefined) data.lng = lng ? Number(lng) : null
+    if (allowedCouriers !== undefined) {
+      data.allowedCouriers = Array.isArray(allowedCouriers) ? allowedCouriers.join(',') : (allowedCouriers || 'yandex,noor,millennium')
+    }
 
     if (login !== undefined && login.trim()) {
       // Check login uniqueness (exclude current pharmacy)

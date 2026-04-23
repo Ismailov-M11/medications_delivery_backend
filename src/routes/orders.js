@@ -19,7 +19,7 @@ router.get('/:token', async (req, res, next) => {
       where: { token: req.params.token },
       include: {
         pharmacy: {
-          select: { name: true, address: true, phone: true, lat: true, lng: true }
+          select: { name: true, address: true, phone: true, lat: true, lng: true, allowedCouriers: true }
         }
       }
     })
@@ -34,6 +34,7 @@ router.get('/:token', async (req, res, next) => {
       pharmacyPhone: order.pharmacy.phone,
       pharmacyLat: order.pharmacy.lat,
       pharmacyLng: order.pharmacy.lng,
+      pharmacyAllowedCouriers: order.pharmacy.allowedCouriers,
     }
     res.json({ success: true, data: response })
   } catch (err) {
