@@ -175,7 +175,9 @@ router.post('/orders', async (req, res, next) => {
         select: { name: true },
       })
       const message = `${pharmacy.name}\nSsylka dlya zakaza / Buyurtma havolasi:\n${orderUrl}`
-      sendSms(cleanPhone, message).catch((err) => console.error('[eskiz] SMS error:', err))
+      sendSms(cleanPhone, message)
+        .then(() => console.log(`[eskiz] SMS dispatched for order ${token}`))
+        .catch((err) => console.error(`[eskiz] SMS error for order ${token}:`, err.message))
     }
 
     res.status(201).json({ success: true, data: { order, orderUrl } })
