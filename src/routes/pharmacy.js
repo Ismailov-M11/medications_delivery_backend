@@ -153,7 +153,7 @@ router.get('/orders', async (req, res, next) => {
 // POST /api/pharmacy/orders
 router.post('/orders', async (req, res, next) => {
   try {
-    const { pharmacyComment, medicinesTotal, customerPhone } = req.body
+    const { pharmacyComment, medicinesTotal, customerPhone, customerName } = req.body
     const token = await generateOrderToken()
     const cleanPhone = customerPhone ? customerPhone.replace(/\s+/g, '') : null
     const order = await prisma.order.create({
@@ -163,6 +163,7 @@ router.post('/orders', async (req, res, next) => {
         pharmacyComment: pharmacyComment || null,
         medicinesTotal: medicinesTotal != null ? Number(medicinesTotal) : 0,
         customerPhone: cleanPhone,
+        customerName: customerName || null,
       },
     })
     const baseUrl = process.env.CLIENT_URL || 'https://tezyubor.uz'
