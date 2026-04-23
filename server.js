@@ -17,8 +17,6 @@ const webhooksRoutes = require('./src/routes/webhooks')
 
 const app = express()
 
-// Middleware
-app.use(helmet())
 const ALLOWED_ORIGINS = [
   process.env.CLIENT_URL,
   'https://tezyubor.uz',
@@ -28,13 +26,18 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
 ].filter(Boolean)
 
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
     callback(new Error(`CORS: origin ${origin} not allowed`))
   },
   credentials: true,
-}))
+}
+
+// cors must run before helmet so preflight responses include allow-origin header
+app.use(cors(corsOptions))
+app.options('*', cors(corsOptions))
+app.use(helmet({ crossOriginResourcePolicy: false }))
 app.use(morgan('combined'))
 app.use(express.json())
 
@@ -52,6 +55,11 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }))
 // Error handler
 app.use((err, req, res, _next) => {
   console.error(err)
+  const origin = req.headers.origin
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+  }
   res.status(500).json({ success: false, message: err.message || 'Server error' })
 })
 
