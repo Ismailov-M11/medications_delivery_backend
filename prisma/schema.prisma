@@ -39,8 +39,7 @@ model SubscriptionPayment {
   id         String    @id @default(cuid())
   pharmacyId String
   pharmacy   Pharmacy  @relation(fields: [pharmacyId], references: [id])
-  uuid       String    @unique
-  invoiceId  String?
+  invoiceId  String    @unique
   amount     Int
   status     String    @default("pending")
   createdAt  DateTime  @default(now())

@@ -104,22 +104,21 @@ router.put('/location', async (req, res, next) => {
 router.post('/subscription/pay', async (req, res, next) => {
   try {
     const { createInvoice } = require('../utils/multicardApi')
-    const uuid = crypto.randomUUID()
+    const invoiceId = crypto.randomUUID()
     const amount = 10000000 // 100,000 sum in tiyins
 
-    const result = await createInvoice({ uuid, amount })
+    const result = await createInvoice({ invoiceId, amount })
 
     await prisma.subscriptionPayment.create({
       data: {
         pharmacyId: req.user.id,
-        uuid,
-        invoiceId: result.invoice_id || result.id || null,
+        invoiceId,
         amount,
         status: 'pending',
       }
     })
 
-    res.json({ success: true, data: { checkoutUrl: result.checkout_url || result.checkoutUrl } })
+    res.json({ success: true, data: { checkoutUrl: result.data?.checkout_url } })
   } catch (err) {
     next(err)
   }
