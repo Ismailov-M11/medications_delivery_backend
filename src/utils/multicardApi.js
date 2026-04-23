@@ -38,6 +38,7 @@ async function createInvoice({ uuid, amount, description, successUrl, failUrl })
       description: description || 'Подписка на 30 дней',
       success_url: successUrl || `${process.env.APP_FRONTEND_URL || 'https://app.tezyubor.uz'}/?paid=1`,
       fail_url: failUrl || `${process.env.APP_FRONTEND_URL || 'https://app.tezyubor.uz'}/`,
+      callback_url: `${process.env.API_URL || 'https://api.tezyubor.uz'}/api/webhooks/multicard`,
       uuid,
     }),
   })
