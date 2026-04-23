@@ -284,15 +284,20 @@ router.get('/clients', async (req, res, next) => {
         clientsMap.set(phone, {
           phone,
           name: order.customerName,
-          address: order.customerAddress,
+          addresses: new Set(),
           ordersCount: 0,
           lastOrderAt: order.createdAt,
         })
       }
-      clientsMap.get(phone).ordersCount++
+      const client = clientsMap.get(phone)
+      client.ordersCount++
+      if (order.customerAddress) {
+        client.addresses.add(order.customerAddress)
+      }
     }
 
     const clients = Array.from(clientsMap.values())
+      .map(c => ({ ...c, addresses: Array.from(c.addresses) }))
       .sort((a, b) => b.ordersCount - a.ordersCount)
 
     res.json({ success: true, data: { clients, total: clients.length } })
