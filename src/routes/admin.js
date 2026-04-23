@@ -154,6 +154,51 @@ router.delete('/pharmacies/:id', async (req, res, next) => {
   }
 })
 
+// GET /api/admin/clients
+router.get('/clients', async (req, res, next) => {
+  try {
+    const orders = await prisma.order.findMany({
+      where: { customerPhone: { not: null } },
+      select: {
+        customerName: true,
+        customerPhone: true,
+        customerAddress: true,
+        createdAt: true,
+        pharmacy: { select: { name: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    const clientsMap = new Map()
+    for (const order of orders) {
+      const phone = order.customerPhone
+      if (!phone) continue
+      if (!clientsMap.has(phone)) {
+        clientsMap.set(phone, {
+          phone,
+          name: order.customerName,
+          addresses: new Set(),
+          pharmacies: new Set(),
+          ordersCount: 0,
+          lastOrderAt: order.createdAt,
+        })
+      }
+      const client = clientsMap.get(phone)
+      client.ordersCount++
+      if (order.customerAddress) client.addresses.add(order.customerAddress)
+      if (order.pharmacy?.name) client.pharmacies.add(order.pharmacy.name)
+    }
+
+    const clients = Array.from(clientsMap.values())
+      .map(c => ({ ...c, addresses: Array.from(c.addresses), pharmacies: Array.from(c.pharmacies) }))
+      .sort((a, b) => b.ordersCount - a.ordersCount)
+
+    res.json({ success: true, data: { clients, total: clients.length } })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // GET /api/admin/analytics
 router.get('/analytics', async (req, res, next) => {
   try {
