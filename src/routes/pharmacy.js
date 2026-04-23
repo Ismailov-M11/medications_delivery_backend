@@ -153,18 +153,31 @@ router.get('/orders', async (req, res, next) => {
 // POST /api/pharmacy/orders
 router.post('/orders', async (req, res, next) => {
   try {
-    const { pharmacyComment, medicinesTotal } = req.body
+    const { pharmacyComment, medicinesTotal, customerPhone } = req.body
     const token = await generateOrderToken()
+    const cleanPhone = customerPhone ? customerPhone.replace(/\s+/g, '') : null
     const order = await prisma.order.create({
       data: {
         token,
         pharmacyId: req.user.id,
         pharmacyComment: pharmacyComment || null,
         medicinesTotal: medicinesTotal != null ? Number(medicinesTotal) : 0,
+        customerPhone: cleanPhone,
       },
     })
     const baseUrl = process.env.CLIENT_URL || 'https://tezyubor.uz'
     const orderUrl = `${baseUrl}/order/${token}`
+
+    if (cleanPhone) {
+      const { sendSms } = require('../utils/eskizApi')
+      const pharmacy = await prisma.pharmacy.findUnique({
+        where: { id: req.user.id },
+        select: { name: true },
+      })
+      const message = `${pharmacy.name}\nSsylka dlya zakaza / Buyurtma havolasi:\n${orderUrl}`
+      sendSms(cleanPhone, message).catch((err) => console.error('[eskiz] SMS error:', err))
+    }
+
     res.status(201).json({ success: true, data: { order, orderUrl } })
   } catch (err) {
     next(err)
