@@ -7,7 +7,7 @@ async function checkSubscription(req, res, next) {
       select: { isActive: true, subscriptionExpiry: true }
     })
     if (!pharmacy || !pharmacy.isActive) {
-      return res.status(403).json({ success: false, message: 'Pharmacy account is inactive' })
+      return res.status(403).json({ success: false, message: 'Account is inactive' })
     }
     if (pharmacy.subscriptionExpiry && pharmacy.subscriptionExpiry < new Date()) {
       await prisma.pharmacy.update({ where: { id: req.user.id }, data: { isActive: false } })
