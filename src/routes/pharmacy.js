@@ -8,6 +8,15 @@ const { checkSubscription } = require('../middleware/checkSubscription')
 
 const router = express.Router()
 
+// Always store phones as 998XXXXXXXXX (no + prefix, 12 digits)
+function normalizePhone(phone) {
+  if (!phone) return null
+  const digits = phone.replace(/\D/g, '')
+  if (digits.startsWith('998') && digits.length === 12) return digits
+  if (digits.length === 9) return `998${digits}`
+  return digits.length > 0 ? digits : null
+}
+
 async function generateOrderToken() {
   while (true) {
     const digits = Math.floor(1000000 + Math.random() * 9000000).toString()
@@ -155,7 +164,7 @@ router.post('/orders', async (req, res, next) => {
   try {
     const { pharmacyComment, medicinesTotal, customerPhone, customerName } = req.body
     const token = await generateOrderToken()
-    const cleanPhone = customerPhone ? customerPhone.replace(/\s+/g, '') : null
+    const cleanPhone = normalizePhone(customerPhone)
     const order = await prisma.order.create({
       data: {
         token,
@@ -319,7 +328,7 @@ router.get('/clients', async (req, res, next) => {
 
     const clientsMap = new Map()
     for (const order of orders) {
-      const phone = order.customerPhone
+      const phone = normalizePhone(order.customerPhone)
       if (!phone) continue
       if (!clientsMap.has(phone)) {
         clientsMap.set(phone, {

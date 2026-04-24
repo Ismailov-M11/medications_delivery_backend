@@ -19,10 +19,15 @@ router.get('/:token/saved-addresses', async (req, res, next) => {
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
     if (!order.customerPhone) return res.json({ success: true, data: { addresses: [] } })
 
+    // Build phone variants to handle both +998... and 998... stored formats
+    const rawDigits = order.customerPhone.replace(/\D/g, '')
+    const fullDigits = rawDigits.startsWith('998') && rawDigits.length === 12 ? rawDigits : `998${rawDigits}`
+    const phoneVariants = Array.from(new Set([fullDigits, `+${fullDigits}`, rawDigits].filter(Boolean)))
+
     const pastOrders = await prisma.order.findMany({
       where: {
         pharmacyId: order.pharmacyId,
-        customerPhone: order.customerPhone,
+        customerPhone: { in: phoneVariants },
         customerAddress: { not: null },
         token: { not: order.token },
         status: { in: ['awaiting_confirmation', 'confirmed', 'courier_pickup', 'courier_picked', 'courier_delivery', 'delivered'] },
