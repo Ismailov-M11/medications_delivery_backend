@@ -104,6 +104,19 @@ router.post('/signup', async (req, res, next) => {
       return res.status(409).json({ success: false, message: 'An account with this email already exists' })
     }
 
+    // Block reuse of phone number for another free trial
+    if (phone && phone.trim()) {
+      const cleanPhone = phone.replace(/\D/g, '')
+      const phoneExists = await prisma.pharmacy.findFirst({
+        where: {
+          phone: { in: [phone.trim(), cleanPhone, `+${cleanPhone}`] }
+        }
+      })
+      if (phoneExists) {
+        return res.status(409).json({ success: false, message: 'An account with this phone number already exists' })
+      }
+    }
+
     const hashed = await bcrypt.hash(password, 10)
     const subscriptionExpiry = new Date()
     subscriptionExpiry.setDate(subscriptionExpiry.getDate() + 7)
