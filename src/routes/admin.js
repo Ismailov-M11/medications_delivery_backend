@@ -30,6 +30,7 @@ router.get('/orders', async (req, res, next) => {
       ...order,
       pharmacyName: pharmacy?.name ?? null,
       pharmacyAddress: pharmacy?.address ?? null,
+      pharmacyPhone: pharmacy?.phone ?? null,
       pharmacyLat: pharmacy?.lat ?? null,
       pharmacyLng: pharmacy?.lng ?? null,
     }))
