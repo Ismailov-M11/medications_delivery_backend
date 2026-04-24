@@ -16,16 +16,23 @@ router.get('/orders', async (req, res, next) => {
     const where = {}
     if (req.query.pharmacyId) where.pharmacyId = req.query.pharmacyId
 
-    const [orders, total] = await Promise.all([
+    const [rawOrders, total] = await Promise.all([
       prisma.order.findMany({
         where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { pharmacy: { select: { name: true } } }
+        include: { pharmacy: { select: { name: true, address: true, lat: true, lng: true, phone: true } } }
       }),
       prisma.order.count({ where })
     ])
+    const orders = rawOrders.map(({ pharmacy, ...order }) => ({
+      ...order,
+      pharmacyName: pharmacy?.name ?? null,
+      pharmacyAddress: pharmacy?.address ?? null,
+      pharmacyLat: pharmacy?.lat ?? null,
+      pharmacyLng: pharmacy?.lng ?? null,
+    }))
     res.json({
       success: true,
       data: { orders, total, page, pages: Math.ceil(total / limit) }
