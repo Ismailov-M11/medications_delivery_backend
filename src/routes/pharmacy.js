@@ -342,7 +342,16 @@ router.get('/clients', async (req, res, next) => {
       const client = clientsMap.get(phone)
       client.ordersCount++
       if (order.customerAddress) {
-        client.addresses.add(order.customerAddress)
+        const parts = [
+          order.apartment ? `кв. ${order.apartment}` : null,
+          order.entrance  ? `п. ${order.entrance}`   : null,
+          order.floor     ? `эт. ${order.floor}`     : null,
+          order.intercom  ? `домофон ${order.intercom}` : null,
+        ].filter(Boolean)
+        const fullAddress = parts.length
+          ? `${order.customerAddress}, ${parts.join(', ')}`
+          : order.customerAddress
+        client.addresses.add(fullAddress)
       }
     }
 
