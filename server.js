@@ -34,21 +34,25 @@ const corsOptions = {
   credentials: true,
 }
 
-// cors must run before helmet so preflight responses include allow-origin header
-app.use(cors(corsOptions))
-app.options('*', cors(corsOptions))
 app.use(helmet({ crossOriginResourcePolicy: false }))
 app.use(morgan('combined'))
 app.use(express.json())
 
-// Routes
+// Courier webhooks are server-to-server — mount before CORS so the
+// Origin header from delivery services doesn't get rejected.
+app.use('/api/noor', noorRoutes)
+app.use('/api/millennium', millenniumRoutes)
+app.use('/api/webhooks', webhooksRoutes)
+
+// CORS for browser clients
+app.use(cors(corsOptions))
+app.options('*', cors(corsOptions))
+
+// Browser-facing routes
 app.use('/api/auth', authRoutes)
 app.use('/api/pharmacy', pharmacyRoutes)
 app.use('/api/orders', ordersRoutes)
 app.use('/api/admin', adminRoutes)
-app.use('/api/noor', noorRoutes)
-app.use('/api/millennium', millenniumRoutes)
-app.use('/api/webhooks', webhooksRoutes)
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }))
 
