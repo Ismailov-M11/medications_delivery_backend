@@ -1,14 +1,14 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
 const prisma = require('../config/db')
-const { auth, requireRole } = require('../middleware/auth')
+const { auth, requireRole, requirePermission } = require('../middleware/auth')
 
 const router = express.Router()
 router.use(auth)
 router.use(requireRole('admin'))
 
 // GET /api/admin/orders
-router.get('/orders', async (req, res, next) => {
+router.get('/orders', requirePermission('orders:view'), async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1)
     const limit = Math.min(100, parseInt(req.query.limit) || 20)
@@ -89,7 +89,7 @@ router.get('/orders', async (req, res, next) => {
 })
 
 // GET /api/admin/orders/stats
-router.get('/orders/stats', async (req, res, next) => {
+router.get('/orders/stats', requirePermission('orders:view'), async (req, res, next) => {
   try {
     const grouped = await prisma.order.groupBy({
       by: ['status'],
@@ -115,7 +115,7 @@ router.get('/orders/stats', async (req, res, next) => {
 })
 
 // GET /api/admin/pharmacies
-router.get('/pharmacies', async (req, res, next) => {
+router.get('/pharmacies', requirePermission('pharmacies:view'), async (req, res, next) => {
   try {
     // Auto-deactivate expired subscriptions
     await prisma.pharmacy.updateMany({
@@ -167,7 +167,7 @@ router.get('/pharmacies', async (req, res, next) => {
 })
 
 // POST /api/admin/pharmacies
-router.post('/pharmacies', async (req, res, next) => {
+router.post('/pharmacies', requirePermission('pharmacies:create'), async (req, res, next) => {
   try {
     const { name, ownerName, address, phone, login, password, lat, lng, subscriptionExpiry, allowedCouriers } = req.body
     if (!name || !phone || !login || !password) {
@@ -200,7 +200,7 @@ router.post('/pharmacies', async (req, res, next) => {
 })
 
 // PUT /api/admin/pharmacies/:id
-router.put('/pharmacies/:id', async (req, res, next) => {
+router.put('/pharmacies/:id', requirePermission('pharmacies:edit'), async (req, res, next) => {
   try {
     const { name, ownerName, address, phone, isActive, subscriptionExpiry, login, password, lat, lng, allowedCouriers } = req.body
     const data = {}
@@ -246,7 +246,7 @@ router.put('/pharmacies/:id', async (req, res, next) => {
 })
 
 // DELETE /api/admin/pharmacies/:id — soft delete
-router.delete('/pharmacies/:id', async (req, res, next) => {
+router.delete('/pharmacies/:id', requirePermission('pharmacies:delete'), async (req, res, next) => {
   try {
     await prisma.pharmacy.update({
       where: { id: req.params.id },
@@ -259,7 +259,7 @@ router.delete('/pharmacies/:id', async (req, res, next) => {
 })
 
 // GET /api/admin/clients
-router.get('/clients', async (req, res, next) => {
+router.get('/clients', requirePermission('clients:view'), async (req, res, next) => {
   try {
     const { search, dateFrom, dateTo, pharmacyId, minOrders } = req.query
     const dbWhere = { customerPhone: { not: null } }
@@ -349,7 +349,7 @@ router.get('/clients', async (req, res, next) => {
 })
 
 // GET /api/admin/analytics
-router.get('/analytics', async (req, res, next) => {
+router.get('/analytics', requirePermission('analytics:view'), async (req, res, next) => {
   try {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)

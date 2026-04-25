@@ -57,16 +57,49 @@ router.post('/admin/login', async (req, res, next) => {
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password required' })
     }
+
+    // Check super admin (Admin model) first
     const admin = await prisma.admin.findUnique({ where: { email } })
-    if (!admin) {
+    if (admin) {
+      const valid = await bcrypt.compare(password, admin.password)
+      if (!valid) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' })
+      }
+      const token = jwt.sign(
+        { id: admin.id, role: 'admin', isSuperAdmin: true },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      )
+      return res.json({
+        success: true,
+        data: {
+          token,
+          user: { id: admin.id, role: 'admin', isSuperAdmin: true, name: admin.email }
+        }
+      })
+    }
+
+    // Check admin user (AdminUser model)
+    const adminUser = await prisma.adminUser.findUnique({
+      where: { email },
+      include: {
+        roles: { include: { role: { select: { permissions: true } } } }
+      }
+    })
+    if (!adminUser) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' })
     }
-    const valid = await bcrypt.compare(password, admin.password)
+    if (!adminUser.isActive) {
+      return res.status(403).json({ success: false, message: 'Account inactive' })
+    }
+    const valid = await bcrypt.compare(password, adminUser.password)
     if (!valid) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' })
     }
+
+    const permissions = [...new Set(adminUser.roles.flatMap(ur => ur.role.permissions))]
     const token = jwt.sign(
-      { id: admin.id, role: 'admin' },
+      { id: adminUser.id, role: 'admin', permissions },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     )
@@ -74,7 +107,7 @@ router.post('/admin/login', async (req, res, next) => {
       success: true,
       data: {
         token,
-        user: { id: admin.id, role: 'admin' }
+        user: { id: adminUser.id, role: 'admin', name: adminUser.name, permissions }
       }
     })
   } catch (err) {

@@ -15,6 +15,33 @@ model Admin {
   createdAt DateTime @default(now())
 }
 
+model Role {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  permissions String[]
+  users       AdminUserRole[]
+  createdAt   DateTime        @default(now())
+}
+
+model AdminUser {
+  id        String          @id @default(cuid())
+  name      String
+  email     String          @unique
+  password  String
+  isActive  Boolean         @default(true)
+  roles     AdminUserRole[]
+  createdAt DateTime        @default(now())
+}
+
+model AdminUserRole {
+  userId String
+  roleId String
+  user   AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
 model Pharmacy {
   id                   String                @id @default(cuid())
   name                 String
