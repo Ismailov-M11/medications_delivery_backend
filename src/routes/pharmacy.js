@@ -143,6 +143,47 @@ router.get('/orders', async (req, res, next) => {
     const pageSize = Math.min(500, Math.max(1, parseInt(req.query.pageSize) || 20))
     const where = { pharmacyId: req.user.id }
 
+    const { search, status, courier, dateFrom, dateTo } = req.query
+
+    if (search && search.trim()) {
+      const s = search.trim()
+      where.OR = [
+        { token: { contains: s, mode: 'insensitive' } },
+        { customerName: { contains: s, mode: 'insensitive' } },
+        { customerPhone: { contains: s } },
+        { customerAddress: { contains: s, mode: 'insensitive' } },
+        { pharmacyComment: { contains: s, mode: 'insensitive' } },
+      ]
+    }
+
+    if (status && status.trim()) {
+      const statuses = status.split(',').map((s) => s.trim()).filter(Boolean)
+      if (statuses.length === 1) {
+        where.status = statuses[0]
+      } else if (statuses.length > 1) {
+        where.status = { in: statuses }
+      }
+    }
+
+    if (courier && courier.trim()) {
+      const couriers = courier.split(',').map((c) => c.trim()).filter(Boolean)
+      if (couriers.length === 1) {
+        where.selectedCourier = couriers[0]
+      } else if (couriers.length > 1) {
+        where.selectedCourier = { in: couriers }
+      }
+    }
+
+    if (dateFrom || dateTo) {
+      where.createdAt = {}
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom)
+      if (dateTo) {
+        const end = new Date(dateTo)
+        end.setHours(23, 59, 59, 999)
+        where.createdAt.lte = end
+      }
+    }
+
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
@@ -315,12 +356,39 @@ router.get('/analytics', async (req, res, next) => {
 router.get('/clients', async (req, res, next) => {
   try {
     const pharmacyId = req.user.id
+    const { search, dateFrom, dateTo, minOrders } = req.query
+
+    const dbWhere = { pharmacyId, customerPhone: { not: null } }
+
+    if (search && search.trim()) {
+      const s = search.trim()
+      dbWhere.OR = [
+        { customerName: { contains: s, mode: 'insensitive' } },
+        { customerPhone: { contains: s } },
+        { customerAddress: { contains: s, mode: 'insensitive' } },
+      ]
+    }
+
+    if (dateFrom || dateTo) {
+      dbWhere.createdAt = {}
+      if (dateFrom) dbWhere.createdAt.gte = new Date(dateFrom)
+      if (dateTo) {
+        const end = new Date(dateTo)
+        end.setHours(23, 59, 59, 999)
+        dbWhere.createdAt.lte = end
+      }
+    }
+
     const orders = await prisma.order.findMany({
-      where: { pharmacyId, customerPhone: { not: null } },
+      where: dbWhere,
       select: {
         customerName: true,
         customerPhone: true,
         customerAddress: true,
+        apartment: true,
+        entrance: true,
+        floor: true,
+        intercom: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' }
@@ -355,9 +423,14 @@ router.get('/clients', async (req, res, next) => {
       }
     }
 
-    const clients = Array.from(clientsMap.values())
+    let clients = Array.from(clientsMap.values())
       .map(c => ({ ...c, addresses: Array.from(c.addresses) }))
       .sort((a, b) => b.ordersCount - a.ordersCount)
+
+    if (minOrders) {
+      const min = parseInt(minOrders)
+      if (!isNaN(min) && min > 0) clients = clients.filter(c => c.ordersCount >= min)
+    }
 
     res.json({ success: true, data: { clients, total: clients.length } })
   } catch (err) {

@@ -16,6 +16,47 @@ router.get('/orders', async (req, res, next) => {
     const where = {}
     if (req.query.pharmacyId) where.pharmacyId = req.query.pharmacyId
 
+    const { search, status, courier, dateFrom, dateTo } = req.query
+
+    if (search && search.trim()) {
+      const s = search.trim()
+      where.OR = [
+        { token: { contains: s, mode: 'insensitive' } },
+        { customerName: { contains: s, mode: 'insensitive' } },
+        { customerPhone: { contains: s } },
+        { customerAddress: { contains: s, mode: 'insensitive' } },
+        { pharmacyComment: { contains: s, mode: 'insensitive' } },
+      ]
+    }
+
+    if (status && status.trim()) {
+      const statuses = status.split(',').map((s) => s.trim()).filter(Boolean)
+      if (statuses.length === 1) {
+        where.status = statuses[0]
+      } else if (statuses.length > 1) {
+        where.status = { in: statuses }
+      }
+    }
+
+    if (courier && courier.trim()) {
+      const couriers = courier.split(',').map((c) => c.trim()).filter(Boolean)
+      if (couriers.length === 1) {
+        where.selectedCourier = couriers[0]
+      } else if (couriers.length > 1) {
+        where.selectedCourier = { in: couriers }
+      }
+    }
+
+    if (dateFrom || dateTo) {
+      where.createdAt = {}
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom)
+      if (dateTo) {
+        const end = new Date(dateTo)
+        end.setHours(23, 59, 59, 999)
+        where.createdAt.lte = end
+      }
+    }
+
     const [rawOrders, total] = await Promise.all([
       prisma.order.findMany({
         where,
@@ -55,7 +96,32 @@ router.get('/pharmacies', async (req, res, next) => {
       data: { isActive: false }
     })
 
+    const pharmacyWhere = {}
+    const { search, isActive, courier } = req.query
+
+    if (search && search.trim()) {
+      const s = search.trim()
+      pharmacyWhere.OR = [
+        { name: { contains: s, mode: 'insensitive' } },
+        { phone: { contains: s } },
+        { login: { contains: s, mode: 'insensitive' } },
+        { ownerName: { contains: s, mode: 'insensitive' } },
+        { address: { contains: s, mode: 'insensitive' } },
+      ]
+    }
+
+    if (isActive === 'true') {
+      pharmacyWhere.isActive = true
+    } else if (isActive === 'false') {
+      pharmacyWhere.isActive = false
+    }
+
+    if (courier && courier.trim()) {
+      pharmacyWhere.allowedCouriers = { contains: courier.trim() }
+    }
+
     const pharmacies = await prisma.pharmacy.findMany({
+      where: pharmacyWhere,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true, name: true, ownerName: true, address: true, phone: true,
@@ -165,8 +231,33 @@ router.delete('/pharmacies/:id', async (req, res, next) => {
 // GET /api/admin/clients
 router.get('/clients', async (req, res, next) => {
   try {
+    const { search, dateFrom, dateTo, pharmacyId, minOrders } = req.query
+    const dbWhere = { customerPhone: { not: null } }
+
+    if (pharmacyId) dbWhere.pharmacyId = pharmacyId
+
+    if (search && search.trim()) {
+      const s = search.trim()
+      dbWhere.OR = [
+        { customerName: { contains: s, mode: 'insensitive' } },
+        { customerPhone: { contains: s } },
+        { customerAddress: { contains: s, mode: 'insensitive' } },
+        { pharmacy: { name: { contains: s, mode: 'insensitive' } } },
+      ]
+    }
+
+    if (dateFrom || dateTo) {
+      dbWhere.createdAt = {}
+      if (dateFrom) dbWhere.createdAt.gte = new Date(dateFrom)
+      if (dateTo) {
+        const end = new Date(dateTo)
+        end.setHours(23, 59, 59, 999)
+        dbWhere.createdAt.lte = end
+      }
+    }
+
     const orders = await prisma.order.findMany({
-      where: { customerPhone: { not: null } },
+      where: dbWhere,
       select: {
         customerName: true,
         customerPhone: true,
@@ -212,9 +303,14 @@ router.get('/clients', async (req, res, next) => {
       if (order.pharmacy?.name) client.pharmacies.add(order.pharmacy.name)
     }
 
-    const clients = Array.from(clientsMap.values())
+    let clients = Array.from(clientsMap.values())
       .map(c => ({ ...c, addresses: Array.from(c.addresses), pharmacies: Array.from(c.pharmacies) }))
       .sort((a, b) => b.ordersCount - a.ordersCount)
+
+    if (minOrders) {
+      const min = parseInt(minOrders)
+      if (!isNaN(min) && min > 0) clients = clients.filter(c => c.ordersCount >= min)
+    }
 
     res.json({ success: true, data: { clients, total: clients.length } })
   } catch (err) {
