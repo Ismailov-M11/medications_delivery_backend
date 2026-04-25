@@ -19,6 +19,7 @@ model Role {
   id          String          @id @default(cuid())
   name        String          @unique
   permissions String[]
+  isActive    Boolean         @default(true)
   users       AdminUserRole[]
   createdAt   DateTime        @default(now())
 }

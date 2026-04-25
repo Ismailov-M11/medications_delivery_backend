@@ -83,7 +83,7 @@ router.post('/admin/login', async (req, res, next) => {
     const adminUser = await prisma.adminUser.findUnique({
       where: { email },
       include: {
-        roles: { include: { role: { select: { permissions: true } } } }
+        roles: { include: { role: { select: { permissions: true, isActive: true } } } }
       }
     })
     if (!adminUser) {
@@ -97,7 +97,11 @@ router.post('/admin/login', async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials' })
     }
 
-    const permissions = [...new Set(adminUser.roles.flatMap(ur => ur.role.permissions))]
+    const permissions = [...new Set(
+      adminUser.roles
+        .filter(ur => ur.role.isActive)
+        .flatMap(ur => ur.role.permissions)
+    )]
     const token = jwt.sign(
       { id: adminUser.id, role: 'admin', permissions },
       process.env.JWT_SECRET,
