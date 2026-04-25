@@ -216,6 +216,8 @@ router.post('/pharmacies', requirePermission('pharmacies:create'), async (req, r
         lng: lng ? Number(lng) : null,
         subscriptionExpiry: subscriptionExpiry ? new Date(subscriptionExpiry) : null,
         allowedCouriers: Array.isArray(allowedCouriers) ? allowedCouriers.join(',') : (allowedCouriers || 'yandex,noor,millennium'),
+        selfRegistered: false,
+        createdById: req.user?.isSuperAdmin ? null : (req.user?.id ?? null),
       }
     })
     const { password: _, ...safePharmacy } = pharmacy
@@ -426,6 +428,73 @@ router.get('/analytics', requirePermission('analytics:view'), async (req, res, n
         ordersByDay: Object.entries(ordersByDay).map(([date, count]) => ({ date, count }))
       }
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/admin/activations
+router.get('/activations', requirePermission('activations:view'), async (req, res, next) => {
+  try {
+    const pharmacies = await prisma.pharmacy.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        login: true,
+        phone: true,
+        isActive: true,
+        selfRegistered: true,
+        createdAt: true,
+        subscriptionExpiry: true,
+        createdById: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
+    })
+
+    const total = pharmacies.length
+    const selfRegisteredCount = pharmacies.filter(p => p.selfRegistered).length
+    const superAdminCount = pharmacies.filter(p => !p.selfRegistered && !p.createdById).length
+
+    // Group by admin user
+    const byUser = {}
+    for (const p of pharmacies) {
+      if (!p.selfRegistered && p.createdById) {
+        if (!byUser[p.createdById]) {
+          byUser[p.createdById] = { user: p.createdBy, count: 0 }
+        }
+        byUser[p.createdById].count++
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        selfRegisteredCount,
+        superAdminCount,
+        byUser: Object.values(byUser),
+        pharmacies,
+      },
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/admin/pharmacies/:id/creator
+router.put('/pharmacies/:id/creator', requirePermission('pharmacies:edit'), async (req, res, next) => {
+  try {
+    const { createdById, selfRegistered } = req.body
+    const data = {}
+    if (selfRegistered !== undefined) data.selfRegistered = Boolean(selfRegistered)
+    if (createdById !== undefined) data.createdById = createdById || null
+    const pharmacy = await prisma.pharmacy.update({
+      where: { id: req.params.id },
+      data,
+      select: { id: true, name: true, createdById: true, selfRegistered: true, createdBy: { select: { id: true, name: true } } },
+    })
+    res.json({ success: true, data: pharmacy })
   } catch (err) {
     next(err)
   }

@@ -169,6 +169,7 @@ router.post('/signup', async (req, res, next) => {
         isActive: true,
         requiresLocation: true,
         subscriptionExpiry,
+        selfRegistered: true,
       }
     })
 

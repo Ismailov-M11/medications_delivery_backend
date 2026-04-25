@@ -25,13 +25,14 @@ model Role {
 }
 
 model AdminUser {
-  id        String          @id @default(cuid())
-  name      String
-  email     String          @unique
-  password  String
-  isActive  Boolean         @default(true)
-  roles     AdminUserRole[]
-  createdAt DateTime        @default(now())
+  id               String          @id @default(cuid())
+  name             String
+  email            String          @unique
+  password         String
+  isActive         Boolean         @default(true)
+  roles            AdminUserRole[]
+  createdPharmacies Pharmacy[]     @relation("PharmacyCreatedBy")
+  createdAt        DateTime        @default(now())
 }
 
 model AdminUserRole {
@@ -58,6 +59,9 @@ model Pharmacy {
   requiresLocation     Boolean               @default(false)
   subscriptionExpiry   DateTime?
   allowedCouriers      String                @default("yandex,noor,millennium")
+  selfRegistered       Boolean               @default(false)
+  createdById          String?
+  createdBy            AdminUser?            @relation("PharmacyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt            DateTime              @default(now())
   orders               Order[]
   subscriptionPayments SubscriptionPayment[]
