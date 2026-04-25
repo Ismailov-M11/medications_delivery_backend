@@ -14,7 +14,11 @@ router.get('/orders', async (req, res, next) => {
     const limit = Math.min(100, parseInt(req.query.limit) || 20)
     const skip = (page - 1) * limit
     const where = {}
-    if (req.query.pharmacyId) where.pharmacyId = req.query.pharmacyId
+    if (req.query.pharmacyId) {
+      const ids = String(req.query.pharmacyId).split(',').map((s) => s.trim()).filter(Boolean)
+      if (ids.length === 1) where.pharmacyId = ids[0]
+      else if (ids.length > 1) where.pharmacyId = { in: ids }
+    }
 
     const { search, status, courier, dateFrom, dateTo } = req.query
 
