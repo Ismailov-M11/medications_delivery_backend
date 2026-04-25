@@ -84,6 +84,32 @@ router.get('/orders', async (req, res, next) => {
   }
 })
 
+// GET /api/admin/orders/stats
+router.get('/orders/stats', async (req, res, next) => {
+  try {
+    const grouped = await prisma.order.groupBy({
+      by: ['status'],
+      _count: { status: true },
+    })
+    const map = {}
+    let total = 0
+    for (const row of grouped) {
+      map[row.status] = row._count.status
+      total += row._count.status
+    }
+    const awaiting = map['awaiting_confirmation'] ?? 0
+    const delivering =
+      (map['confirmed'] ?? 0) +
+      (map['courier_pickup'] ?? 0) +
+      (map['courier_picked'] ?? 0) +
+      (map['courier_delivery'] ?? 0)
+    const delivered = map['delivered'] ?? 0
+    res.json({ success: true, data: { total, awaiting, delivering, delivered } })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // GET /api/admin/pharmacies
 router.get('/pharmacies', async (req, res, next) => {
   try {
