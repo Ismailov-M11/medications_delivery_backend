@@ -71,6 +71,7 @@ model Order {
   trackingUrl     String?
   totalPrice      Float?
   noorOrderId        Int?
+  noorDisplayId      Int?
   millenniumOrderId  Int?
 
   createdAt DateTime @default(now())

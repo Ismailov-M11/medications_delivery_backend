@@ -257,6 +257,7 @@ router.put('/orders/:token/confirm', async (req, res, next) => {
     const courier = order.selectedCourier
 
     let noorOrderId = order.noorOrderId
+    let noorDisplayId = order.noorDisplayId
     let millenniumOrderId = order.millenniumOrderId
     let trackingUrl = order.trackingUrl
 
@@ -270,6 +271,7 @@ router.put('/orders/:token/confirm', async (req, res, next) => {
         }
         const noorRes = await noorApi.createOrder({ ...order, pharmacy: order.pharmacy })
         noorOrderId = noorRes?.order?.id ?? null
+        noorDisplayId = noorRes?.order?.display_id ?? null
         trackingUrl = noorRes?.order?.link ?? noorRes?.order?.tracking_url ?? null
       } else if (courier === 'millennium') {
         const tmRes = await millenniumApi.createOrder({ ...order, pharmacy: order.pharmacy })
@@ -279,7 +281,7 @@ router.put('/orders/:token/confirm', async (req, res, next) => {
 
     const updated = await prisma.order.update({
       where: { token: req.params.token },
-      data: { status: 'confirmed', noorOrderId, millenniumOrderId, trackingUrl },
+      data: { status: 'confirmed', noorOrderId, noorDisplayId, millenniumOrderId, trackingUrl },
     })
     res.json({ success: true, data: updated })
   } catch (err) {

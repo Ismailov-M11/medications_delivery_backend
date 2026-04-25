@@ -65,9 +65,14 @@ router.post('/webhook', async (req, res) => {
       updateData.status = newStatus
     }
 
-    // Save noorOrderId if not already stored
+    // Save internal noorOrderId (used for API calls: reorder, cancel)
     if (noorOrder?.id && !order.noorOrderId) {
       updateData.noorOrderId = noorOrder.id
+    }
+
+    // Save display_id — the human-readable order number shown in Noor's interface
+    if (noorOrder?.display_id) {
+      updateData.noorDisplayId = noorOrder.display_id
     }
 
     // Save tracking link (field is "link" in Noor's response)
