@@ -7,6 +7,32 @@ const router = express.Router()
 router.use(auth)
 router.use(requireRole('admin'))
 
+// GET /api/admin/me — returns fresh permissions for the current admin user
+router.get('/me', async (req, res, next) => {
+  try {
+    if (req.user?.isSuperAdmin) {
+      return res.json({ success: true, data: { isSuperAdmin: true, permissions: null } })
+    }
+    const adminUser = await prisma.adminUser.findUnique({
+      where: { id: req.user.id },
+      include: {
+        roles: { include: { role: { select: { permissions: true, isActive: true } } } }
+      }
+    })
+    if (!adminUser || !adminUser.isActive) {
+      return res.status(403).json({ success: false, message: 'Account inactive' })
+    }
+    const permissions = [...new Set(
+      adminUser.roles
+        .filter(ur => ur.role.isActive)
+        .flatMap(ur => ur.role.permissions)
+    )]
+    res.json({ success: true, data: { isSuperAdmin: false, permissions } })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // GET /api/admin/orders
 router.get('/orders', requirePermission('orders:view'), async (req, res, next) => {
   try {

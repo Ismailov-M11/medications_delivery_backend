@@ -44,10 +44,11 @@ router.post('/', async (req, res, next) => {
 // PUT /api/admin/roles/:id
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, permissions } = req.body
+    const { name, permissions, isActive } = req.body
     const data = {}
     if (name !== undefined && name.trim()) data.name = name.trim()
     if (permissions !== undefined) data.permissions = Array.isArray(permissions) ? permissions : []
+    if (isActive !== undefined) data.isActive = Boolean(isActive)
     const role = await prisma.role.update({ where: { id: req.params.id }, data })
     res.json({ success: true, data: role })
   } catch (err) {
