@@ -436,45 +436,86 @@ router.get('/analytics', requirePermission('analytics:view'), async (req, res, n
 // GET /api/admin/activations
 router.get('/activations', requirePermission('activations:view'), async (req, res, next) => {
   try {
-    const pharmacies = await prisma.pharmacy.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        login: true,
-        phone: true,
-        isActive: true,
-        selfRegistered: true,
-        createdAt: true,
-        subscriptionExpiry: true,
-        createdById: true,
-        createdBy: { select: { id: true, name: true, email: true } },
-      },
-    })
+    const { search, creatorType, createdById, status, dateFrom, dateTo } = req.query
+    const page     = Math.max(1, parseInt(req.query.page)     || 1)
+    const pageSize = Math.min(200, parseInt(req.query.pageSize) || 20)
 
-    const total = pharmacies.length
-    const selfRegisteredCount = pharmacies.filter(p => p.selfRegistered).length
-    const superAdminCount = pharmacies.filter(p => !p.selfRegistered && !p.createdById).length
+    // ── Global stats (unfiltered) ──────────────────────────────────────
+    const [globalTotal, globalSelf, globalByUserRows] = await Promise.all([
+      prisma.pharmacy.count(),
+      prisma.pharmacy.count({ where: { selfRegistered: true } }),
+      prisma.pharmacy.findMany({
+        where: { selfRegistered: false, createdById: { not: null } },
+        select: { createdById: true, createdBy: { select: { id: true, name: true, email: true } } },
+      }),
+    ])
 
-    // Group by admin user
-    const byUser = {}
-    for (const p of pharmacies) {
-      if (!p.selfRegistered && p.createdById) {
-        if (!byUser[p.createdById]) {
-          byUser[p.createdById] = { user: p.createdBy, count: 0 }
-        }
-        byUser[p.createdById].count++
-      }
+    const superAdminCount = globalTotal - globalSelf - globalByUserRows.length
+    const byUserMap = {}
+    for (const p of globalByUserRows) {
+      if (!byUserMap[p.createdById]) byUserMap[p.createdById] = { user: p.createdBy, count: 0 }
+      byUserMap[p.createdById].count++
     }
+
+    // ── Filtered where ─────────────────────────────────────────────────
+    const where = {}
+
+    if (search?.trim()) {
+      const s = search.trim()
+      where.OR = [
+        { name:  { contains: s, mode: 'insensitive' } },
+        { login: { contains: s, mode: 'insensitive' } },
+        { phone: { contains: s } },
+      ]
+    }
+
+    if (creatorType === 'self')       where.selfRegistered = true
+    if (creatorType === 'superadmin') { where.selfRegistered = false; where.createdById = null }
+    if (creatorType === 'user') {
+      where.selfRegistered = false
+      where.createdById = createdById ? createdById : { not: null }
+    }
+
+    if (status === 'active')   where.isActive = true
+    if (status === 'inactive') where.isActive = false
+
+    if (dateFrom || dateTo) {
+      where.createdAt = {}
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom)
+      if (dateTo) where.createdAt.lte = new Date(dateTo)
+    }
+
+    const [filteredTotal, pharmacies] = await Promise.all([
+      prisma.pharmacy.count({ where }),
+      prisma.pharmacy.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          name: true,
+          login: true,
+          phone: true,
+          isActive: true,
+          selfRegistered: true,
+          createdAt: true,
+          subscriptionExpiry: true,
+          createdById: true,
+          createdBy: { select: { id: true, name: true, email: true } },
+        },
+      }),
+    ])
 
     res.json({
       success: true,
       data: {
-        total,
-        selfRegisteredCount,
+        total: globalTotal,
+        selfRegisteredCount: globalSelf,
         superAdminCount,
-        byUser: Object.values(byUser),
+        byUser: Object.values(byUserMap),
         pharmacies,
+        filteredTotal,
       },
     })
   } catch (err) {
