@@ -168,6 +168,20 @@ router.post('/orders', requirePermission('orders:create'), async (req, res, next
   }
 })
 
+// DELETE /api/admin/orders/bulk
+router.delete('/orders/bulk', requirePermission('orders:delete'), async (req, res, next) => {
+  try {
+    const { ids } = req.body
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids array is required' })
+    }
+    await prisma.order.deleteMany({ where: { id: { in: ids } } })
+    res.json({ success: true, count: ids.length })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // DELETE /api/admin/orders/:id
 router.delete('/orders/:id', requirePermission('orders:delete'), async (req, res, next) => {
   try {
