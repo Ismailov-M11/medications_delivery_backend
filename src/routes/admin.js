@@ -3,6 +3,23 @@ const bcrypt = require('bcryptjs')
 const prisma = require('../config/db')
 const { auth, requireRole, requirePermission } = require('../middleware/auth')
 
+function normalizePhone(phone) {
+  if (!phone) return null
+  const digits = phone.replace(/\D/g, '')
+  if (digits.startsWith('998') && digits.length === 12) return digits
+  if (digits.length === 9) return `998${digits}`
+  return digits.length > 0 ? digits : null
+}
+
+async function generateOrderToken() {
+  while (true) {
+    const digits = Math.floor(1000000 + Math.random() * 9000000).toString()
+    const token = `ORD${digits}`
+    const existing = await prisma.order.findUnique({ where: { token } })
+    if (!existing) return token
+  }
+}
+
 const router = express.Router()
 router.use(auth)
 router.use(requireRole('admin'))
@@ -109,6 +126,53 @@ router.get('/orders', requirePermission('orders:view'), async (req, res, next) =
       success: true,
       data: { orders, total, page, pages: Math.ceil(total / limit) }
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/admin/orders — create order on behalf of a pharmacy
+router.post('/orders', requirePermission('orders:create'), async (req, res, next) => {
+  try {
+    const { pharmacyId, pharmacyComment, medicinesTotal, customerPhone, customerName } = req.body
+    if (!pharmacyId) return res.status(400).json({ success: false, message: 'pharmacyId required' })
+    const pharmacy = await prisma.pharmacy.findUnique({ where: { id: pharmacyId } })
+    if (!pharmacy) return res.status(404).json({ success: false, message: 'Pharmacy not found' })
+
+    const token = await generateOrderToken()
+    const cleanPhone = normalizePhone(customerPhone)
+    const order = await prisma.order.create({
+      data: {
+        token,
+        pharmacyId,
+        pharmacyComment: pharmacyComment || null,
+        medicinesTotal: medicinesTotal != null ? Number(medicinesTotal) : 0,
+        customerPhone: cleanPhone,
+        customerName: customerName || null,
+      },
+    })
+    const baseUrl = process.env.CLIENT_URL || 'https://tezyubor.uz'
+    const orderUrl = `${baseUrl}/order/${token}`
+
+    if (cleanPhone) {
+      const { sendSms } = require('../utils/eskizApi')
+      const message = `${pharmacy.name}\nSsylka dlya zakaza / Buyurtma havolasi:\n${orderUrl}`
+      sendSms(cleanPhone, message)
+        .then(() => console.log(`[eskiz] Admin SMS dispatched for order ${token}`))
+        .catch((err) => console.error(`[eskiz] Admin SMS error for order ${token}:`, err.message))
+    }
+
+    res.status(201).json({ success: true, data: { order, orderUrl } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// DELETE /api/admin/orders/:id
+router.delete('/orders/:id', requirePermission('orders:delete'), async (req, res, next) => {
+  try {
+    await prisma.order.delete({ where: { id: req.params.id } })
+    res.json({ success: true })
   } catch (err) {
     next(err)
   }
@@ -273,14 +337,11 @@ router.put('/pharmacies/:id', requirePermission('pharmacies:edit'), async (req, 
   }
 })
 
-// DELETE /api/admin/pharmacies/:id — soft delete
+// DELETE /api/admin/pharmacies/:id
 router.delete('/pharmacies/:id', requirePermission('pharmacies:delete'), async (req, res, next) => {
   try {
-    await prisma.pharmacy.update({
-      where: { id: req.params.id },
-      data: { isActive: false }
-    })
-    res.json({ success: true, message: 'Pharmacy deactivated' })
+    await prisma.pharmacy.delete({ where: { id: req.params.id } })
+    res.json({ success: true })
   } catch (err) {
     next(err)
   }
