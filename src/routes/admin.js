@@ -354,7 +354,12 @@ router.put('/pharmacies/:id', requirePermission('pharmacies:edit'), async (req, 
 // DELETE /api/admin/pharmacies/:id
 router.delete('/pharmacies/:id', requirePermission('pharmacies:delete'), async (req, res, next) => {
   try {
-    await prisma.pharmacy.delete({ where: { id: req.params.id } })
+    const id = req.params.id
+    await prisma.$transaction([
+      prisma.subscriptionPayment.deleteMany({ where: { pharmacyId: id } }),
+      prisma.order.deleteMany({ where: { pharmacyId: id } }),
+      prisma.pharmacy.delete({ where: { id } }),
+    ])
     res.json({ success: true })
   } catch (err) {
     next(err)
