@@ -8,13 +8,12 @@ const { checkSubscription } = require('../middleware/checkSubscription')
 
 const router = express.Router()
 
-// Always store phones as 998XXXXXXXXX (no + prefix, 12 digits)
 function normalizePhone(phone) {
   if (!phone) return null
   const digits = phone.replace(/\D/g, '')
-  if (digits.startsWith('998') && digits.length === 12) return digits
-  if (digits.length === 9) return `998${digits}`
-  return digits.length > 0 ? digits : null
+  if (digits.startsWith('998') && digits.length === 12) return `+${digits}`
+  if (digits.length === 9) return `+998${digits}`
+  return digits.length > 0 ? `+${digits}` : null
 }
 
 async function generateOrderToken() {
@@ -53,7 +52,7 @@ router.put('/me', async (req, res, next) => {
     const data = {}
     if (name !== undefined && name.trim()) data.name = name.trim()
     if (ownerName !== undefined) data.ownerName = ownerName || null
-    if (phone !== undefined && phone.trim()) data.phone = phone.trim()
+    if (phone !== undefined && phone.trim()) data.phone = normalizePhone(phone) || phone.trim()
     if (address !== undefined) data.address = address || null
 
     if (newPassword && newPassword.trim()) {

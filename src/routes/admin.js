@@ -6,9 +6,9 @@ const { auth, requireRole, requirePermission } = require('../middleware/auth')
 function normalizePhone(phone) {
   if (!phone) return null
   const digits = phone.replace(/\D/g, '')
-  if (digits.startsWith('998') && digits.length === 12) return digits
-  if (digits.length === 9) return `998${digits}`
-  return digits.length > 0 ? digits : null
+  if (digits.startsWith('998') && digits.length === 12) return `+${digits}`
+  if (digits.length === 9) return `+998${digits}`
+  return digits.length > 0 ? `+${digits}` : null
 }
 
 async function generateOrderToken() {
@@ -287,7 +287,7 @@ router.post('/pharmacies', requirePermission('pharmacies:create'), async (req, r
         name,
         ownerName: ownerName || null,
         address: address || null,
-        phone,
+        phone: normalizePhone(phone) || phone,
         login,
         password: hashed,
         lat: lat ? Number(lat) : null,
@@ -313,7 +313,7 @@ router.put('/pharmacies/:id', requirePermission('pharmacies:edit'), async (req, 
     if (name !== undefined) data.name = name
     if (ownerName !== undefined) data.ownerName = ownerName || null
     if (address !== undefined) data.address = address || null
-    if (phone !== undefined) data.phone = phone
+    if (phone !== undefined) data.phone = normalizePhone(phone) || phone
     if (isActive !== undefined) data.isActive = Boolean(isActive)
     if (subscriptionExpiry !== undefined) data.subscriptionExpiry = subscriptionExpiry ? new Date(subscriptionExpiry) : null
     if (lat !== undefined) data.lat = lat ? Number(lat) : null
