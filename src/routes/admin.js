@@ -192,6 +192,71 @@ router.delete('/orders/:id', requirePermission('orders:delete'), async (req, res
   }
 })
 
+// PUT /api/admin/orders/:token/confirm — admin confirms order and dispatches courier
+router.put('/orders/:token/confirm', requirePermission('orders:confirm'), async (req, res, next) => {
+  try {
+    const noorApi = require('../utils/noorApi')
+    const millenniumApi = require('../utils/millenniumApi')
+    const SKIP = process.env.SKIP_COURIER_DISPATCH === 'true'
+
+    const order = await prisma.order.findUnique({
+      where: { token: req.params.token },
+      include: { pharmacy: { select: { lat: true, lng: true, address: true, phone: true, name: true } } },
+    })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+    if (order.status !== 'awaiting_confirmation') {
+      return res.status(400).json({ success: false, message: 'Order is not awaiting confirmation' })
+    }
+
+    const courier = order.selectedCourier
+    let noorOrderId = order.noorOrderId
+    let noorDisplayId = order.noorDisplayId
+    let millenniumOrderId = order.millenniumOrderId
+    let trackingUrl = order.trackingUrl
+
+    if (!SKIP) {
+      if (courier === 'noor') {
+        const evalResult = await noorApi.evaluate(order.pharmacy.lat, order.pharmacy.lng, order.customerLat, order.customerLng)
+        const stage = evalResult?.evaluated_stage
+        if (stage !== 1) {
+          const NOOR_ERRORS = { 23: 'Недостаточно средств на балансе Noor', 27: 'Нет свободных курьеров', 28: 'Адрес вне зоны Noor' }
+          return res.status(400).json({ success: false, message: NOOR_ERRORS[stage] || `Noor: ошибка (stage ${stage})` })
+        }
+        const noorRes = await noorApi.createOrder({ ...order, pharmacy: order.pharmacy })
+        noorOrderId = noorRes?.order?.id ?? null
+        noorDisplayId = noorRes?.order?.display_id ?? null
+        trackingUrl = noorRes?.order?.link ?? noorRes?.order?.tracking_url ?? null
+      } else if (courier === 'millennium') {
+        const tmRes = await millenniumApi.createOrder({ ...order, pharmacy: order.pharmacy })
+        millenniumOrderId = tmRes?.data?.order_id ?? null
+      }
+    }
+
+    const updated = await prisma.order.update({
+      where: { token: req.params.token },
+      data: { status: 'confirmed', noorOrderId, noorDisplayId, millenniumOrderId, trackingUrl },
+    })
+    res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/admin/orders/:token/cancel — admin cancels order
+router.put('/orders/:token/cancel', requirePermission('orders:cancel'), async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({ where: { token: req.params.token } })
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+    const updated = await prisma.order.update({
+      where: { token: req.params.token },
+      data: { status: 'cancelled' },
+    })
+    res.json({ success: true, data: updated })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // GET /api/admin/orders/stats
 router.get('/orders/stats', requirePermission('orders:view'), async (req, res, next) => {
   try {
